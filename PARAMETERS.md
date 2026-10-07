@@ -44,7 +44,7 @@ them are in [references/](references):
 | `chargedParticleFlux` | Cosmic-ray rate before the ACD | 1 /cm2 s | LAT raw trigger rate 2-4 kHz over about 3.2e4 cm2, so about 0.1 /cm2 s (inferred) | Verify against AMS fluxes. |
 | `exposureDuration` | Observation time | 1e4 s | LAT 1-year survey, HERD 1, 5 and 10 years (Fig. 3) | Add the duty cycle (survey mode, SAA). |
 | `fieldOfViewSolidAngle` | Instrument field of view | 1 sr | LAT 2.4 sr at 1 GeV [atwood2009lat], HERD wider (top and four sides) | |
-| `minimumIonisingEnergyLossPerLength` | MIP loss in plastic | 1.95 MeV/cm | Polyvinyltoluene 2.019 MeV/cm (1.956 MeV cm2/g at 1.032 g/cm3) [pdg2024pvt] | 1.95 is the mass stopping power, not per length. Update to 2.019. |
+| `minimumIonisingEnergyLossPerLength` | MIP loss in plastic | 2.019 MeV/cm | Polyvinyltoluene 2.019 MeV/cm (1.956 MeV cm2/g at 1.032 g/cm3) [pdg2024pvt] | Updated from 1.95, which was the mass stopping power rather than per length. |
 | `maximumVetoEfficiency` | Ceiling of ACD efficiency | 0.999 | LAT tile requirement above 0.9997 averaged over the ACD area. Fibre ribbons over the gaps have above 90%. Whole-LAT charged rejection requirement 0.99999 with the other subsystems | Lumps hermeticity and intrinsic efficiency. Optimistic choice: 0.9997. |
 | `vetoTurnOnWidthFraction`, `accidentalVetoScale` | Turn-on of the efficiency and noise dead time | 0.25, 0.1 MeV | No source | Toy numbers. They need a real noise or dark-count model. |
 | Dead time | Readout dead time | Only the noise term | LAT 26.5 us per event, so about 1% at 400 Hz | Missing from the model. |

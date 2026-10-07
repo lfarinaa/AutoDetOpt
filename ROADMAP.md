@@ -77,7 +77,7 @@ The output can be piped to a file by the caller, so the script writes nothing it
 - [ ] Add readout dead time and strip hit efficiency to the model.
 - [ ] Derive a first confusion matrix from the strip hit efficiency.
 
-- [ ] Update the scintillator radiation length to 42.54 cm and the MIP energy loss to 2.019 MeV/cm (PDG, polyvinyltoluene).
+- [ ] Update the scintillator radiation length to 42.54 cm (PDG, polyvinyltoluene). The MIP energy loss is already 2.019 MeV/cm.
 - [ ] Keep `references/` in step: add a bibliography entry and a local copy for every new source.
 
 ## Housekeeping
