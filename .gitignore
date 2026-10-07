@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+
+# Downloaded papers: kept locally in references/, not versioned. The bibliography and text extracts stay tracked.
+references/*.pdf

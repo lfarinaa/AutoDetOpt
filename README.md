@@ -41,6 +41,107 @@ How it works:
 
 All numbers are placeholders. Do not trust an optimum until they are set to realistic values.
 
+### Design decisions for v0
+
+- **Single objective.** v0 optimises one figure of merit. There is no multi-objective optimisation and no
+  Pareto front here.
+- **The figure of merit is a spatial likelihood ratio.** The signal-cone count (fixed 2 sigma radius) is to be
+  replaced by the likelihood ratio of the data with and without a point source. In the expected (Asimov)
+  limit this is a spatial integral over the sky around the source:
+  `Z^2 = integral of 2 [(s + b) ln(1 + s/b) - s] dA`, with `s(r)` the signal density (flux times PSF) and `b`
+  the background density. This is how Fermi-LAT sensitivities are computed (median TS = 25 for 5 sigma, at
+  least 10 photons), and what the HERD ICRC 2021 sensitivity does through the Fermi tools.
+- **Each conversion layer is its own pseudo-detector.** Photons are classified by conversion layer, as in
+  Fermi-LAT event types (PSF0-3). Class `l` has its own signal `S * p_l`, its own PSF (from the per-layer
+  angular variance) and its own background `b_l`. The objective is the sum over classes of the spatial
+  integral above. The converter amount and distribution then change the core and tails of each class
+  separately, and no class is diluted by the others.
+- **Confusion matrix, identity by default.** The model has a matrix `C[l', l]`, the probability of assigning
+  layer `l'` to a photon that truly converted in layer `l`. v0 uses the identity (perfect labels), which is
+  the trivial case and an upper bound. Rows that are all identical give no labels, which collapses to a
+  single mixture PSF and is a lower bound. A realistic matrix will come from the track-reconstruction model.
+- **Layers without foils are allowed, but never empty.** A layer with no foil still converts some photons in
+  its passive material (silicon, supports, electronics). So the lower bound of `converterThickness` is a very
+  small positive number, not zero. Placeholder `1e-3 cm` of tungsten, about `3e-3` radiation lengths,
+  comparable to one silicon plane. Then `p_l > 0` for every layer, no class is empty and there is no `0/0` in
+  the integral. A design with bare layers at the front can then preserve the PSF of photons that convert
+  deeper. The bound should later come from a passive-material budget.
+- **Background per class.** The diffuse photon background follows the conversion probabilities. The
+  charged-particle background that leaks through the ACD is assigned entirely to the first layer, because a
+  charged track has hits from the top. **Consequence found in the first implementation:** together with
+  perfect labels, this lets the optimiser sacrifice layer 0 as a dump for all the charged background
+  (about 8e6 counts, `Z^2 = 0` for that class) and use the other six classes as clean detectors. The tracker
+  then rejects charged particles perfectly and the ACD is nearly redundant: thickness at its lower bound,
+  threshold at its upper bound, veto efficiency about 0.48. This is a property of the idealised inputs, not a
+  design result. A leakage of charged background into the other classes is needed before trusting any ACD
+  result. Not decided.
+- **Reconstructable layers only.** The last `minimumDownstreamLayersForReconstruction = 3` layers cannot be a
+  conversion layer, so there are `numberOfLayers - 3 = 7` classes. This is a fixed mask, not an empty class.
+
+### Power-law source and energy bounds (planned for v0)
+
+The monoenergetic photon is replaced by a power law, `dN/dE ~ E^-Gamma`, truncated at both ends:
+`E_min <= E <= E_max`, and zero outside. `Gamma = 2` as in the Fermi-LAT and HERD sensitivity definitions.
+The diffuse photon and charged-particle backgrounds get their own spectral indices. All values below are
+placeholders. The reasoning is recorded here so the bounds are not changed without checking it.
+
+**Lower bound `E_min`: Compton domination.**
+- The model is a pair-conversion model. Where Compton scattering dominates over pair production, the
+  conversion probability, the PSF and the track reconstruction do not describe the events. Compton needs its
+  own reconstruction, which is v1 territory.
+- The Compton and pair cross sections cross at about 10 MeV in tungsten and at a higher energy in silicon
+  (from memory, check against NIST XCOM). `E_min` must sit above the crossover for every material that acts
+  as a converter.
+- Starting value `E_min = 100 MeV`: above the crossover with margin. The `7/9` conversion coefficient is the
+  high-energy limit, and PDG (Eq. 34.32) says it is accurate to a few percent only down to about 1 GeV. So it
+  is optimistic at `E_min`, and the shortfall should be quantified with tabulated cross sections.
+
+**Upper bound `E_max`: shower containment, statistics and backsplash.**
+1. *Shower containment (pair-track validity).* The model assumes two tracks from a clean pair. At high
+   energy the pair radiates and the secondaries shower inside the dense foil stack, so hits no longer belong
+   to two tracks. The shower maximum is at `t_max ~ ln(E / E_c) + 0.5` radiation lengths for a photon, with
+   `E_c` the critical energy of the converter (7.97 MeV for e- in tungsten, PDG [pdg2024tungsten]). Placeholder rule: the total
+   material of the tracker, `X_tot` in radiation lengths, should not exceed `t_max(E_max)`. For
+   `E_max = 10 GeV` that is about 7.6 radiation lengths. Must be validated with a full simulation.
+2. *Particle flux and statistics.* For `Gamma = 2` the expected signal counts above `E` fall as `1/E`.
+   Beyond the energy where fewer than about 10 signal photons are expected above `E_max`, higher energies
+   add nothing to the sensitivity (the minimum-photon criterion of the Fermi definition).
+3. *Backsplash and self-veto.* Shower particles leaking back into the ACD veto real photons, and the effect
+   grows with energy (the reason the Fermi-LAT ACD is segmented, from memory). Not modelled in v0, but it
+   sets a practical upper limit and is one of the missing trade-offs that stop ACD thickness running to its
+   bound.
+- Starting value `E_max = 10 GeV`.
+
+**Flux normalisation (decided).** Each flux is the integral flux above `E_min`, so the existing numbers keep
+their meaning. The truncation at `E_max` then removes a small part of the stated flux, which is accounted for
+in the counts.
+
+**Warnings, not penalties.** The bounds are checked and reported, but they do not enter the loss. That keeps
+the gradients clean and keeps violations visible. Warnings go to stderr in the script, and are checked at
+every recorded step and for the final design:
+- `E_min` is below the Compton and pair crossover of a converter material.
+- The tracker is too large for the upper bound: `X_tot > t_max(E_max)`. The optimiser can trigger this by
+  growing converter thickness, and the layer count (scanned by hand) can trigger it too.
+- Fewer than about 10 expected signal photons above `E_max`.
+
+**What the model needs.**
+- *Energy-dependent physics.* Pair cross section from tables, multiple scattering `~ 1/E`, opening angle
+  `~ m_e / E`. The PSF then depends on energy as well as conversion layer.
+- *Energy bins.* Log-spaced bins, 4 per decade as in the HERD ICRC 2021 sensitivity. `Z^2` sums over layer
+  classes and energy bins.
+- *Assumption: energy is known.* There is no calorimeter in v0, so in reality the energy of a photon is not
+  measured by the tracker. For simplicity the default ignores this: energy bins are treated as independent
+  classes with perfect energy assignment, which is optimistic. Not considering energy confusion also means
+  the calorimeter design is out of scope for v0.
+- *To do: energy confusion and calorimeter design.* The structure is the same as for the conversion layer. An
+  energy-assignment matrix, with the identity as the trivial case (the current default), would model the
+  energy resolution and misassignment. The no-energy limit is the flux-weighted mixture PSF over the
+  spectrum. A calorimeter would set the matrix, so its design is a later step.
+- **No cone radius parameter.** The cone radius disappears with the integral, so it is not a free or fixed
+  input. PSF68 and PSF95 are reported as outputs, to compare with published curves.
+- **Motivation.** HERD dropped tungsten foils in the tracker because they degraded the PSF, especially for
+  resolving close point sources. v0 is meant to find the optimum amount and distribution of converter.
+
 ### Known limitations of v0
 
 - **No events.** Averaging the variance over conversion layers replaces a mixture of PSFs with one Gaussian.
@@ -125,6 +226,18 @@ full simulation), at the optimised design and at a few perturbed points.
 - Aehle et al., pathwise derivatives of electromagnetic shower simulations (2024).
 
 ---
+
+## References
+
+Papers and web pages used for the numbers are kept in [references/](references), with a BibTeX bibliography in
+[references/bibliography.bib](references/bibliography.bib). Every number in the notebook's input cell is followed
+by a comment with its source (a physical constant, a link, or "Placeholder").
+
+## Parameters
+
+Every input stands for real physical quantities. [PARAMETERS.md](PARAMETERS.md) ties each one to its meaning
+and to reference values from the Fermi-LAT instrument paper and the HERD proceedings, and lists the decisions
+needed before the values are applied.
 
 ## Planned tooling
 
