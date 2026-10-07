@@ -22,8 +22,8 @@ them are in [references/](references):
 | Input | Stands for | Current range | Reference | Note |
 |---|---|---|---|---|
 | `converterThickness` (per layer) | Tungsten foil thickness | 1e-3 to 0.2 cm | LAT front foils 0.010 cm (0.03 X0), back 0.072 cm (0.18 X0, 93% W) | Lower bound is the passive material that is always there. LAT's is 0.014 X0 per x-y plane (supports, detectors, electronics), about 0.005 cm of W-equivalent. The current 1e-3 cm is a factor of about 5 more optimistic. **decision** |
-| `layerSpacing` | Distance between x-y layers | 0.5 to 5 cm | LAT: pitch / spacing = 0.0071 with 228 um pitch, so about 3.2 cm | In range. |
-| `stripPitch` | Strip or fibre pitch | 50 to 1000 um | LAT 228 um, HERD FIT about 250 um | In range. 50 um is optimistic for strips over large areas. |
+| `layerSpacing` | Distance between x-y layers | 0.5 to 5 cm | LAT: pitch / spacing = 0.0071 with 228 µm pitch, so about 3.2 cm | In range. |
+| `stripPitch` | Strip or fibre pitch | 50 to 1000 µm | LAT 228 µm, HERD FIT about 250 µm | In range. 50 µm is optimistic for strips over large areas. |
 | `acdThickness` | Plastic scintillator thickness | 0.5 to 3 cm | LAT 1.0 cm (0.06 X0 including the thermal blanket) | In range. LAT's 0.06 X0 includes the micrometeoroid blanket, the model counts the scintillator only (0.024 X0 per cm). |
 | `acdThreshold` | Discriminator level for the veto | 0.05 to 1.0 MeV | LAT: 0.45 MIP on board, about 0.30 MIP on the ground | Physically this is a fraction of the MIP deposit, not MeV. With the threshold in MeV, changing the thickness silently changes the threshold in MIP units. Suggest reparametrising in MIP. **decision** |
 
@@ -35,7 +35,7 @@ them are in [references/](references):
 | `7/9` coefficient | High-energy pair conversion limit | 7/9 | Physical constant, PDG Eq. 34.32 [pdg2024passage] | PDG says it is accurate to a few percent only down to 1 GeV, so it is optimistic at the 100 MeV lower bound. |
 | `numberOfLayers` | x-y layers | 10 | LAT 18 (16 with foils, 2 bare), HERD FIT 7 double layers | |
 | `minimumDownstreamLayersForReconstruction` | Layers needed after the conversion | 3 | HERD: at least 3 hits per particle in each of X/Y, which rejects conversions in the last two double layers, so 2 | Suggest 2 for HERD. **decision** |
-| `siliconThickness` | Silicon per layer | 0.03 cm (one plane) | LAT SSD 400 um = 0.04 cm, and a layer has two planes (x and y) | The model counts one plane per layer. A layer of two planes would be 0.08 cm. HERD's FIT is scintillating fibre, not silicon. |
+| `siliconThickness` | Silicon per layer | 0.03 cm (one plane) | LAT SSD 400 µm = 0.04 cm, and a layer has two planes (x and y) | The model counts one plane per layer. A layer of two planes would be 0.08 cm. HERD's FIT is scintillating fibre, not silicon. |
 | `detectorSideLength` | Active tracker width | 40 cm | LAT 1.8 m x 1.8 m x 0.72 m (whole instrument), tower of 4 x 8.95 cm SSDs | **decision**: instrument scale. |
 | `maximumHeight` | Tracker height budget | 30 cm | LAT 0.72 m for the whole instrument | No source for the tracker alone. **decision** |
 | `channelBudget` | Readout channels | 5e4 | LAT: 1536 channels per tower layer pair (from the text), total of the order 1e6 (memory) | Scales with the detector size. **decision** |
