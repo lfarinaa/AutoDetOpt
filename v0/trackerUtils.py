@@ -1,0 +1,406 @@
+"""Formulas and fixed inputs of trackerOptimisation v0.
+
+The fixed inputs come first, each followed by its unit and its source. Then the mapping of the unbounded optimiser
+parameters to physical ones, then the detector model: material, conversion, scattering, the spatial likelihood
+ratio, the ACD, the constraints and the loss. Everything is a differentiable JAX function, so jax.grad gives the
+gradient of the loss with respect to every design parameter.
+
+The notebook imports this module. The functions read the inputs from this module's namespace when they are called
+(or traced, for the jitted ones), so to change an input for an experiment set it on the module, for example
+`import trackerUtils; trackerUtils.downstreamScatteringWeight = 0.0`, before the first call that uses it.
+
+Naming: camelCase everywhere, no unit suffixes. Units: lengths in cm, energies in MeV, times in s, solid angles in sr,
+fluxes in 1/(cm^2 s). Angular variances are in rad^2.
+"""
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+# 64-bit floats: the significance formula subtracts large, similar numbers, and float32 loses precision there.
+jax.config.update("jax_enable_x64", True)
+
+
+# ======================================================================================================
+# Fixed inputs. These are not optimised. If the optimiser could change them it would simply run to the bounds.
+# ======================================================================================================
+# Every number is followed by its unit and its source: a physical constant, a link, or "Placeholder" when no source has
+# been found yet. Bibliography keys (in brackets) are in references/bibliography.bib, with local copies of the sources.
+# Reference values and the open decisions for each placeholder are in PARAMETERS.md.
+
+# Radiation lengths of the materials.
+radiationLengthTungsten = 0.3504       # cm. Physical constant: tungsten radiation length [pdg2024tungsten] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/tungsten_W.html
+radiationLengthSilicon = 9.37          # cm. Physical constant: silicon radiation length [pdg2024silicon] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/silicon_Si.html
+radiationLengthScintillator = 42.4     # cm. Physical constant: polyvinyltoluene scintillator is 42.54 cm [pdg2024pvt] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/polyvinyltoluene.html. 42.4 is slightly off, to update.
+
+# Pair conversion probability after x radiation lengths is 1 - exp(-7/9 * x), the high energy limit.
+pairConversionCoefficientPerRadiationLength = 7.0 / 9.0   # Physical constant: sigma = 7/9 A/(X0 N_A), PDG Eq. 34.32 [pdg2024passage] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-passage-particles-matter.pdf. Accurate to a few percent only down to 1 GeV, so optimistic at 100 MeV.
+
+numberOfLayers = 10                    # Discrete, so it is scanned by hand rather than optimised. Placeholder. Reference: LAT 18 x-y layers, 16 with tungsten [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.1; HERD FIT 7 double layers [farina2021herd] https://doi.org/10.22323/1.395.0651 section 2.
+photonEnergy = 100.0                   # MeV. Placeholder, to be replaced by a truncated power law (README). Fixed because there is no calorimeter: energy is not a free measurement.
+electronMass = 0.511                   # MeV. Physical constant: electron mass, PDG https://pdg.lbl.gov/2024/
+detectorSideLength = 40.0              # cm. Placeholder. Reference: LAT is 1.8 m wide [atwood2009lat] https://arxiv.org/abs/0902.1089 Fig. 1. Decision pending (PARAMETERS.md).
+siliconThickness = 0.03                # cm, thickness of one silicon plane. Placeholder. Reference: LAT strip detectors are 400 µm = 0.04 cm [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.1.
+
+# Fluxes and observation conditions.
+signalPhotonFlux = 1e-3                # 1/(cm^2 s). Placeholder, very bright. Reference: 1e-7 above 100 MeV for a faint high-latitude source [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d.
+diffusePhotonFlux = 1e-2               # 1/(cm^2 s) over the field of view. Placeholder. Reference: 1.5e-5 per cm^2 s sr above 100 MeV at high latitude, index 2.1 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note e.
+chargedParticleFlux = 1.0              # 1/(cm^2 s). Placeholder. Reference: about 0.1 inferred from the LAT raw trigger rate of 2-4 kHz over about 3.2e4 cm^2 [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.3.
+exposureDuration = 1e4                 # s. Placeholder. Reference: LAT 1-year survey [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d; HERD 1, 5 and 10 years [farina2021herd] https://doi.org/10.22323/1.395.0651 Fig. 3.
+fieldOfViewSolidAngle = 1.0            # sr. Placeholder. Reference: LAT 2.4 sr at 1 GeV [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.1.
+
+# Constraints that keep the optimum finite. Without them the optimiser drives the strip pitch to its
+# lower bound and makes the detector as tall and channel-rich as allowed.
+channelBudget = 5e4                    # number of strips. Placeholder, no source found. Scales with detector size, decision pending.
+maximumHeight = 30.0                   # cm. Placeholder. Reference: LAT whole instrument is 0.72 m high, tracker alone not found [atwood2009lat] https://arxiv.org/abs/0902.1089 Fig. 1.
+
+# A track needs hits in the conversion layer and in the layers below it to be reconstructed.
+hitsRequiredForTracking = 3            # Hits per track: the conversion layer and the two layers below. HERD needs at least 3 hits per particle in each of X and Y [farina2021herd] https://doi.org/10.22323/1.395.0651 section 4. LAT: the first 2 planes after the conversion must be measured [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2.
+minimumDownstreamLayersForReconstruction = hitsRequiredForTracking - 1   # Derived: layers below the conversion layer that carry the other hits. 1: the conversion layer carries the first hit.
+fullWeightLayersBelow = hitsRequiredForTracking - 1   # Derived: the layers below that carry fitted hits, so their material scatters the measured direction with full weight. 1: as above.
+
+# Multiple scattering: material below the layers that carry the fitted hits is counted with this reduced weight (toy value).
+downstreamScatteringWeight = 1.0 / 3.0   # Toy value, no source. Applies only beyond the fitted hits. The fit-covariance model is meant to replace it.
+
+# Signal region: a cone around the source with this radius, in units of the angular resolution.
+signalConeRadiusInSigma = 2.0          # Only used by the single-cone check. The objective has no cone. Analysis convention, no source. The Gaussian 68% radius is 1.51 sigma (computed from 1 - exp(-r^2/2)).
+
+# Spatial likelihood ratio (the objective). The sky around the source is integrated out to the field of view.
+numberOfReconstructableLayers = numberOfLayers - minimumDownstreamLayersForReconstruction   # Layers that can be a conversion layer. Derived.
+fieldOfViewRadius = float(np.arccos(1.0 - fieldOfViewSolidAngle / (2.0 * np.pi)))   # rad. Derived, exact: half-angle of a circular cap of that solid angle, Omega = 2 pi (1 - cos(theta)). Mathematical result, no source.
+radialGridMinimum = 1e-4               # rad. Innermost radius of the logarithmic integration grid. Numerical choice, no physical source.
+radialGridPoints = 2000                # Numerical choice, checked against the analytic limit in the checks below.
+minimumSignalPhotons = 10.0            # Soft constraint. Fermi-LAT sensitivity definition: at least 10 photons [fermilat2013performance] https://s3df.slac.stanford.edu/data/fermi/groups/canda/archive/pass8v6/lat_Performance.htm; HERD [farina2021herd] https://doi.org/10.22323/1.395.0651 section 6.
+
+# Conversion-layer classes ("pseudo-detectors"). confusionMatrix[assigned, true] is the probability that a photon
+# that converted in layer `true` is assigned to layer `assigned`, so each column sums to one.
+labelConfusionMatrix = jnp.eye(numberOfReconstructableLayers)   # Perfect labels. The default and an upper bound. Definition, no source.
+noLabelConfusionMatrix = jnp.full((numberOfReconstructableLayers,) * 2, 1.0 / numberOfReconstructableLayers)   # No labels. A lower bound. Definition: every class equally likely.
+# Charged-particle background that gets through the ACD. By assumption nothing rejects it afterwards: the tracker gives no further
+# rejection. It is a minimum-ionising particle crossing the whole instrument, so the foils neither attenuate it nor change its total
+# rate. Which conversion-layer class it falls in is an assumption (no source): it fakes a conversion by interacting in the material of
+# a layer (delta rays, bremsstrahlung, hadronic), so its share follows the radiation lengths of each layer, not the conversion
+# probability. An even split was exploitable: concentrating the signal in one class gave a free rejection by the number of classes.
+
+# Figure of merit: the test statistic TS = 2 ln(L(signal + background) / L(background)), as in Fermi-LAT.
+detectionTestStatistic = 25.0          # TS of a 5 sigma detection, Fermi-LAT [fermilat2013performance] https://s3df.slac.stanford.edu/data/fermi/groups/canda/archive/pass8v6/lat_Performance.htm and [fermipy2017sensitivity] https://fermipy.readthedocs.io/en/v1.2/advanced/sensitivity.html
+constraintPenaltyWeight = 20.0         # Weight of the constraint penalty against -ln(TS). Numerical choice, no physical source. 20 = 2 x 10, the weight used with -ln(Z), so the optimum is unchanged because TS = Z^2.
+
+# Plastic scintillator ACD.
+minimumIonisingEnergyLossPerLength = 2.019   # MeV/cm, energy deposited by a minimum ionising particle. Physical constant: polyvinyltoluene, 1.956 MeV cm^2/g at 1.032 g/cm^3 [pdg2024pvt] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/polyvinyltoluene.html
+maximumVetoEfficiency = 0.9995         # Approximation, chosen between the previous placeholder 0.999 and the LAT tile efficiency above 0.9997 averaged over the ACD area [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.3 and Table 4.
+vetoTurnOnWidthFraction = 0.25         # Width of the efficiency turn-on, as a fraction of the deposit. Toy value, no source.
+accidentalVetoScale = 0.1              # MeV. Sets how fast noise-induced dead time falls with threshold. Toy value, no source.
+
+# Allowed range of each free parameter. Optimisation runs in an unbounded space (see below).
+parameterBounds = {
+    # cm, one value per layer. Never zero: passive material always converts some photons. Lower bound 1e-3 is a placeholder, optimistic: LAT passive material is 0.014 X0 per x-y plane, about 0.005 cm of tungsten [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2. Upper bound 0.2 is a placeholder (LAT back foils are 0.072 cm, Table 2).
+    "converterThickness": (1e-3, 0.2),
+    # cm. Placeholder range. Reference: LAT about 3.2 cm, from pitch 0.0228 cm / 0.0071 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2.
+    "layerSpacing": (0.5, 5.0),
+    # cm. Placeholder range. Reference: LAT 228 µm = 0.0228 cm [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2; HERD FIT about 250 µm [farina2021herd] https://doi.org/10.22323/1.395.0651 section 2.
+    "stripPitch": (0.005, 0.1),
+    # cm. Placeholder range. Reference: LAT 1.0 cm [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 4.
+    "acdThickness": (0.5, 3.0),
+    # MeV. Placeholder range. Reference: LAT 0.45 MIP on board and about 0.30 MIP on the ground [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.3.
+    "acdThreshold": (0.05, 1.0),
+}
+
+
+
+# ======================================================================================================
+# Mapping of the unbounded optimiser parameters to the allowed ranges.
+# ======================================================================================================
+def mapUnboundedToRange(unboundedValue, lowerBound, upperBound):
+    return lowerBound + (upperBound - lowerBound) * jax.nn.sigmoid(unboundedValue)
+
+
+def mapUnboundedToPhysicalParameters(unboundedParameters):
+    return {
+        parameterName: mapUnboundedToRange(unboundedParameters[parameterName], *parameterBounds[parameterName])
+        for parameterName in parameterBounds
+    }
+
+
+# ======================================================================================================
+# Detector model.
+# ======================================================================================================
+# Layers below each layer, used both to decide if a track can be reconstructed and for the lever arm.
+numberOfLayersBelow = numberOfLayers - 1 - jnp.arange(numberOfLayers)
+
+
+def computeLayerMaterial(converterThickness):
+    """Material in each layer, and above and below it, in radiation lengths."""
+    # Material in one layer: tungsten converter plus one silicon plane.
+    converterRadiationLengths = converterThickness / radiationLengthTungsten
+    radiationLengthsPerLayer = converterRadiationLengths + siliconThickness / radiationLengthSilicon
+
+    # Material the photon crosses before reaching a layer, and material the pair crosses after leaving it.
+    radiationLengthsAboveLayer = jnp.cumsum(radiationLengthsPerLayer) - radiationLengthsPerLayer
+    radiationLengthsBelowLayer = jnp.sum(radiationLengthsPerLayer) - jnp.cumsum(radiationLengthsPerLayer)
+    return converterRadiationLengths, radiationLengthsAboveLayer, radiationLengthsBelowLayer
+
+
+def computeConversionProbabilityPerLayer(converterRadiationLengths, radiationLengthsAboveLayer):
+    """Probability that the photon converts in each layer and leaves a reconstructable track."""
+    hasEnoughDownstreamLayers = (numberOfLayersBelow >= minimumDownstreamLayersForReconstruction).astype(float)
+
+    # Photon survives the layers above, then converts in this layer's tungsten. Silicon is ignored as a converter.
+    return (
+        jnp.exp(-pairConversionCoefficientPerRadiationLength * radiationLengthsAboveLayer)
+        * (1.0 - jnp.exp(-pairConversionCoefficientPerRadiationLength * converterRadiationLengths))
+        * hasEnoughDownstreamLayers
+    )
+
+
+def computeExpectedFoilPathAfterConversion(converterRadiationLengths):
+    """Radiation lengths of its own foil that the pair crosses, averaged over where the photon converts in the foil.
+
+    The photon is absorbed as it goes, so the conversion depth t in the foil has density proportional to exp(-kappa t).
+    With u = kappa x the mean depth is x g(u), where g(u) = (1 - (1 + u) exp(-u)) / (u (1 - exp(-u))), and g -> 1/2 for a thin foil.
+    """
+    kappa = pairConversionCoefficientPerRadiationLength
+    u = kappa * converterRadiationLengths
+    meanDepthFraction = (-jnp.expm1(-u) - u * jnp.exp(-u)) / (u * -jnp.expm1(-u))
+    return converterRadiationLengths * (1.0 - meanDepthFraction)
+
+
+def computeScatteringRadiationLengths(converterRadiationLengths):
+    """Radiation lengths that scatter the measured direction of a pair that converted in each layer, as one combined scatterer."""
+    siliconRadiationLengths = siliconThickness / radiationLengthSilicon   # Silicon of one layer, in radiation lengths.
+    radiationLengthsPerLayer = converterRadiationLengths + siliconRadiationLengths
+    cumulative = jnp.concatenate([jnp.zeros(1), jnp.cumsum(radiationLengthsPerLayer)])   # cumulative[k] is the material of layers 0 to k-1.
+    layerIndex = jnp.arange(numberOfLayers)
+    endOfFittedLayers = jnp.minimum(layerIndex + 1 + fullWeightLayersBelow, numberOfLayers)   # 1: first layer below the conversion layer.
+    materialInFittedLayers = cumulative[endOfFittedLayers] - cumulative[layerIndex + 1]   # Full weight: these layers carry the fitted hits.
+    materialBeyondFittedLayers = cumulative[numberOfLayers] - cumulative[endOfFittedLayers]
+    return (
+        computeExpectedFoilPathAfterConversion(converterRadiationLengths)   # The rest of its own foil.
+        + siliconRadiationLengths                                           # Silicon of its own layer, which carries the first hit.
+        + materialInFittedLayers
+        + downstreamScatteringWeight * materialBeyondFittedLayers
+    )
+
+
+def computePerLayerAngularVariance(converterRadiationLengths, layerSpacing, stripPitch):
+    """Angular variance (rad^2) of the reconstructed direction for a photon that converted in each layer."""
+    # Three independent contributions, added in quadrature (variances in rad^2), evaluated per conversion layer.
+    # 1. Multiple scattering, Highland-Lynch-Dahl with the log term (PDG Eq. 34.16). PDG says to apply it once to the combined
+    #    scatterer, because adding separate theta0 in quadrature is systematically too small. Each pair member carries half the energy.
+    scatteringRadiationLengths = computeScatteringRadiationLengths(converterRadiationLengths)
+    highlandLogCorrection = (1.0 + 0.038 * jnp.log(scatteringRadiationLengths)) ** 2   # 0.038: PDG Eq. 34.16 [pdg2024passage] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-passage-particles-matter.pdf
+    multipleScatteringVariance = (13.6 / (photonEnergy / 2.0)) ** 2 * scatteringRadiationLengths * highlandLogCorrection   # 13.6 MeV: same equation. 2.0: equal energy sharing, an approximation.
+    # 2. Intrinsic opening angle of the pair.
+    pairOpeningAngleVariance = (electronMass / photonEnergy) ** 2   # m_e / E: characteristic scale of the pair opening angle, an approximation with no single source.
+    # 3. Strip resolution (pitch / sqrt(12) for a uniform hit distribution) over the lever arm to the last layer.
+    leverArm = jnp.maximum(numberOfLayersBelow, 1) * layerSpacing   # cm
+    stripResolutionVariance = 2.0 * (stripPitch / jnp.sqrt(12.0) / leverArm) ** 2   # 12: variance of a uniform distribution over one pitch is pitch^2/12, standard result (see PDG detectors review [pdg2024detectors] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-particle-detectors-accel.pdf). 2.0: toy factor, no source.
+
+    return multipleScatteringVariance + pairOpeningAngleVariance + stripResolutionVariance
+
+
+def computeEffectiveAngularVariance(converterRadiationLengths, conversionProbabilityPerLayer, layerSpacing, stripPitch):
+    """Variance averaged over conversion layers. Only the single-cone check uses this, the objective keeps each layer."""
+    angularVariancePerLayer = computePerLayerAngularVariance(converterRadiationLengths, layerSpacing, stripPitch)
+    return jnp.sum(conversionProbabilityPerLayer * angularVariancePerLayer) / jnp.sum(conversionProbabilityPerLayer)
+
+
+def computeSignalConeFractions(effectiveAngularVariance):
+    """How much signal the signal cone keeps, and how much of the background it lets in."""
+    signalConeSolidAngle = jnp.pi * signalConeRadiusInSigma**2 * effectiveAngularVariance   # sr
+    backgroundFractionInsideCone = signalConeSolidAngle / fieldOfViewSolidAngle
+    # Fraction of a 2D Gaussian inside a circle of the given radius in sigma.
+    signalContainmentFraction = 1.0 - jnp.exp(-(signalConeRadiusInSigma**2) / 2.0)   # 2.0: from the 2D Gaussian containment, mathematical result.
+    return signalContainmentFraction, backgroundFractionInsideCone
+
+
+def computeAcdResponse(acdThickness, acdThreshold):
+    """Charged-particle veto efficiency, photon survival through the ACD, and livetime lost to noise."""
+    energyDepositedInAcd = minimumIonisingEnergyLossPerLength * acdThickness   # MeV
+    # Smooth turn-on of the charged-particle detection efficiency around the threshold.
+    vetoEfficiency = maximumVetoEfficiency * jax.nn.sigmoid(
+        (energyDepositedInAcd - acdThreshold) / (vetoTurnOnWidthFraction * energyDepositedInAcd)
+    )
+    # A photon that converts inside the ACD is vetoed by mistake ("self-veto"), so a thick ACD costs signal.
+    photonSurvivalProbabilityThroughAcd = jnp.exp(
+        -pairConversionCoefficientPerRadiationLength * acdThickness / radiationLengthScintillator
+    )
+    # Low thresholds trigger the veto on noise, which removes livetime. Toy model, falls exponentially.
+    livetimeFraction = jnp.exp(-jnp.exp(-acdThreshold / accidentalVetoScale))
+    return vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction
+
+
+def computeExpectedCounts(
+    totalConversionProbability, signalContainmentFraction, backgroundFractionInsideCone,
+    vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction,
+):
+    """Expected signal and background counts over the exposure."""
+    detectorArea = detectorSideLength**2   # cm^2
+    exposureFactor = detectorArea * exposureDuration * livetimeFraction
+
+    signalCount = (
+        signalPhotonFlux * exposureFactor * totalConversionProbability
+        * photonSurvivalProbabilityThroughAcd * signalContainmentFraction
+    )
+    # Two backgrounds: diffuse photons that convert like the signal, and charged particles the veto misses.
+    backgroundCount = exposureFactor * backgroundFractionInsideCone * (
+        diffusePhotonFlux * totalConversionProbability * photonSurvivalProbabilityThroughAcd
+        + chargedParticleFlux * (1.0 - vetoEfficiency)
+    )
+    return signalCount, backgroundCount
+
+
+def computeCountsPerLayer(
+    conversionProbabilityPerLayer, converterRadiationLengths, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction
+):
+    """Expected signal and background counts over the field of view, for each true conversion layer."""
+    exposureFactor = detectorSideLength**2 * exposureDuration * livetimeFraction
+    probabilityPerLayer = conversionProbabilityPerLayer[:numberOfReconstructableLayers]
+    # Share of the charged background in each class: follows the material of the layer (foil and silicon), not attenuated from above.
+    materialPerLayer = (converterRadiationLengths + siliconThickness / radiationLengthSilicon)[:numberOfReconstructableLayers]
+    chargedBackgroundLayerShare = materialPerLayer / jnp.sum(materialPerLayer)
+    signalCountPerLayer = signalPhotonFlux * exposureFactor * probabilityPerLayer * photonSurvivalProbabilityThroughAcd
+    backgroundCountPerLayer = exposureFactor * (
+        diffusePhotonFlux * probabilityPerLayer * photonSurvivalProbabilityThroughAcd
+        + chargedParticleFlux * (1.0 - vetoEfficiency) * chargedBackgroundLayerShare
+    )
+    return signalCountPerLayer, backgroundCountPerLayer
+
+
+def computeAsimovIntegrand(signalDensity, backgroundDensity):
+    """2 [(s + b) ln(1 + s/b) - s]: the Asimov likelihood ratio contribution of one patch of sky."""
+    ratio = signalDensity / backgroundDensity
+    # For small s/b the subtraction cancels to rounding noise, so use the series there.
+    smallRatioSeries = ratio**2 / 2.0 - ratio**3 / 6.0 + ratio**4 / 12.0
+    directFormula = (1.0 + ratio) * jnp.log1p(ratio) - ratio
+    return 2.0 * backgroundDensity * jnp.where(ratio < 1e-3, smallRatioSeries, directFormula)   # 2.0: Asimov likelihood ratio definition. 1e-3: switch to the series, numerical choice.
+
+
+def computeSpatialSignificanceSquared(signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, confusionMatrix):
+    """Expected likelihood ratio (TS) of a point source against background alone, summed over assigned-layer classes."""
+    radius = jnp.geomspace(radialGridMinimum, fieldOfViewRadius, radialGridPoints)   # rad
+    # One 2D Gaussian PSF (1/sr) per true conversion layer.
+    psfPerTrueLayer = jnp.exp(-radius[None, :] ** 2 / (2.0 * angularVariancePerLayer[:, None])) / (
+        2.0 * jnp.pi * angularVariancePerLayer[:, None]
+    )
+    # An assigned class sees each true layer with the probability in the confusion matrix.
+    signalDensityPerClass = confusionMatrix @ (signalCountPerLayer[:, None] * psfPerTrueLayer)   # 1/sr
+    backgroundDensityPerClass = (confusionMatrix @ backgroundCountPerLayer) / fieldOfViewSolidAngle   # 1/sr, flat
+    integrand = computeAsimovIntegrand(signalDensityPerClass, backgroundDensityPerClass[:, None])
+    # Integral of the integrand over the circular cap, with the exact area element 2 pi sin(theta) dtheta, as a trapezoid in ln theta (dtheta = theta d ln theta).
+    integralPerClass = jnp.trapezoid(integrand * 2.0 * jnp.pi * jnp.sin(radius[None, :]) * radius[None, :], jnp.log(radius), axis=1)
+    return jnp.sum(integralPerClass)
+
+
+def computeContainmentRadii(signalCountPerLayer, angularVariancePerLayer, containmentFractions=(0.68, 0.95)):   # Conventional PSF68 and PSF95 of Fermi-LAT [atwood2009lat] https://arxiv.org/abs/0902.1089
+    """Containment radii (degrees) of the signal PSF, a mixture over conversion layers. Reported only, not optimised."""
+    radius = jnp.geomspace(radialGridMinimum, fieldOfViewRadius, radialGridPoints)
+    weights = signalCountPerLayer / jnp.sum(signalCountPerLayer)
+    containment = jnp.sum(
+        weights[:, None] * (1.0 - jnp.exp(-radius[None, :] ** 2 / (2.0 * angularVariancePerLayer[:, None]))), axis=0
+    )
+    return [jnp.degrees(jnp.interp(fraction, containment, radius)) for fraction in containmentFractions]
+
+
+def computeConstraintPenalty(stripPitch, layerSpacing):
+    """Channel and height budgets, as smooth penalties that are zero while satisfied."""
+    numberOfChannels = 2 * numberOfLayers * detectorSideLength / stripPitch    # x and y strips. 2: x and y planes, geometry.
+    totalHeight = (numberOfLayers - 1) * layerSpacing   # cm
+    constraintPenalty = (
+        jax.nn.relu(numberOfChannels / channelBudget - 1.0) ** 2
+        + jax.nn.relu(totalHeight / maximumHeight - 1.0) ** 2
+    )
+    return constraintPenalty, numberOfChannels
+
+
+def computeDetectorResponse(unboundedParameters):
+    """Spatial likelihood-ratio significance for a design, plus the single-cone check and diagnostics. Fully differentiable."""
+    physicalParameters = mapUnboundedToPhysicalParameters(unboundedParameters)
+    converterThickness = physicalParameters["converterThickness"]      # Vector, one entry per layer.
+    layerSpacing = physicalParameters["layerSpacing"]
+    stripPitch = physicalParameters["stripPitch"]
+    acdThickness = physicalParameters["acdThickness"]
+    acdThreshold = physicalParameters["acdThreshold"]
+
+    converterRadiationLengths, radiationLengthsAboveLayer, radiationLengthsBelowLayer = computeLayerMaterial(converterThickness)
+    conversionProbabilityPerLayer = computeConversionProbabilityPerLayer(converterRadiationLengths, radiationLengthsAboveLayer)
+    totalConversionProbability = conversionProbabilityPerLayer.sum()
+    vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction = computeAcdResponse(acdThickness, acdThreshold)
+
+    # Objective: each conversion layer is a pseudo-detector with its own PSF, and the spatial likelihood ratios add.
+    angularVariancePerLayer = computePerLayerAngularVariance(
+        converterRadiationLengths, layerSpacing, stripPitch
+    )[:numberOfReconstructableLayers]
+    signalCountPerLayer, backgroundCountPerLayer = computeCountsPerLayer(
+        conversionProbabilityPerLayer, converterRadiationLengths, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction
+    )
+    significanceSquared = computeSpatialSignificanceSquared(
+        signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, labelConfusionMatrix
+    )
+    significanceSquaredNoLabel = computeSpatialSignificanceSquared(
+        signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, noLabelConfusionMatrix
+    )
+    psf68, psf95 = computeContainmentRadii(signalCountPerLayer, angularVariancePerLayer)
+
+    # Single-cone check: one averaged Gaussian and a cone of fixed radius. Not used by the loss.
+    effectiveAngularVariance = computeEffectiveAngularVariance(
+        converterRadiationLengths, conversionProbabilityPerLayer, layerSpacing, stripPitch
+    )
+    signalContainmentFraction, backgroundFractionInsideCone = computeSignalConeFractions(effectiveAngularVariance)
+    signalCount, backgroundCount = computeExpectedCounts(
+        totalConversionProbability, signalContainmentFraction, backgroundFractionInsideCone,
+        vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction,
+    )
+
+    constraintPenalty, numberOfChannels = computeConstraintPenalty(stripPitch, layerSpacing)
+    totalSignalPhotons = jnp.sum(signalCountPerLayer)
+    constraintPenalty = constraintPenalty + jax.nn.relu(1.0 - totalSignalPhotons / minimumSignalPhotons) ** 2
+
+    return dict(
+        testStatistic=significanceSquared,                 # The objective: expected TS, which is Z^2.
+        testStatisticNoLabel=significanceSquaredNoLabel,
+        coneTestStatistic=computeAsimovSignificance(signalCount, backgroundCount) ** 2,
+        significance=jnp.sqrt(significanceSquared),        # Z = sqrt(TS), kept for comparison with the old figure of merit.
+        significanceNoLabel=jnp.sqrt(significanceSquaredNoLabel),
+        coneSignificance=computeAsimovSignificance(signalCount, backgroundCount),
+        signalCount=signalCount,                  # Single-cone check.
+        backgroundCount=backgroundCount,          # Single-cone check.
+        totalSignalPhotons=totalSignalPhotons,
+        constraintPenalty=constraintPenalty,
+        totalConversionProbability=totalConversionProbability,
+        angularResolution=jnp.degrees(jnp.sqrt(effectiveAngularVariance)),
+        psf68=psf68,
+        psf95=psf95,
+        vetoEfficiency=vetoEfficiency,
+        numberOfChannels=numberOfChannels,
+        conversionProbabilityPerLayer=conversionProbabilityPerLayer,
+    )
+
+
+def computeAsimovSignificance(signalCount, backgroundCount):
+    # Median discovery significance for a counting experiment, valid also when the counts are small.
+    return jnp.sqrt(2.0 * ((signalCount + backgroundCount) * jnp.log1p(signalCount / backgroundCount) - signalCount))
+
+
+def computeLoss(unboundedParameters):
+    detectorResponse = computeDetectorResponse(unboundedParameters)
+    # Log of the test statistic keeps gradients well scaled over orders of magnitude; the penalty enforces the budgets.
+    return -jnp.log(detectorResponse["testStatistic"]) + constraintPenaltyWeight * detectorResponse["constraintPenalty"]
+
+
+def computeLossFromSignificance(unboundedParameters):
+    """The previous loss, -ln(Z) with weight 10 on the penalty. The same optimum as computeLoss. Kept in case we go back."""
+    detectorResponse = computeDetectorResponse(unboundedParameters)
+    return -jnp.log(detectorResponse["significance"]) + 10.0 * detectorResponse["constraintPenalty"]   # 10.0: weight of the constraint penalty. Numerical choice, no physical source.
+
+
+scalarMetricNames = (
+    "testStatistic", "testStatisticNoLabel", "coneTestStatistic", "significance", "significanceNoLabel", "coneSignificance", "signalCount", "backgroundCount", "totalSignalPhotons",
+    "constraintPenalty", "totalConversionProbability", "angularResolution", "psf68", "psf95", "vetoEfficiency",
+    "numberOfChannels",
+)
+
+
+@jax.jit
+def computeMetrics(unboundedParameters):
+    return computeDetectorResponse(unboundedParameters)
+

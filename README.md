@@ -17,6 +17,9 @@ Each is refined on its own. Neither imports from the other.
 ## trackerOptimisation v0: the numeric toy model
 
 Notebook: [`v0/trackerOptimisation.ipynb`](v0/trackerOptimisation.ipynb) (JAX, optax, matplotlib).
+All formulas and the fixed inputs are in [`v0/trackerUtils.py`](v0/trackerUtils.py), which the notebook imports.
+The notebook keeps the optimisation loop, the checks, the plots, the design views and the text report
+(`v0/designReport.txt`).
 
 A monoenergetic photon beam at normal incidence hits a stack of tungsten converter layers, each followed by
 two silicon strip planes (x and y), wrapped in a plastic scintillator ACD. The whole response is a smooth
@@ -248,8 +251,8 @@ full simulation), at the optimised design and at a few perturbed points.
 ## References
 
 Papers and web pages used for the numbers are kept in [references/](references), with a BibTeX bibliography in
-[references/bibliography.bib](references/bibliography.bib). Every number in the notebook's input cell is followed
-by a comment with its source (a physical constant, a link, or "Placeholder").
+[references/bibliography.bib](references/bibliography.bib). Every number in the fixed inputs of `v0/trackerUtils.py` is
+followed by a comment with its source (a physical constant, a link, or "Placeholder").
 
 ## Parameters
 

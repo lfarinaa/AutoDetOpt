@@ -11,7 +11,8 @@ The output can be piped to a file by the caller, so the script writes nothing it
 - [ ] Move the fixed inputs and `parameterBounds` out of the code and into the input file.
 - [ ] Parse the input file with validation: unknown keys, missing keys, bad units and out-of-range values
       give a clear error and a non-zero exit code.
-- [ ] Separate the model (pure functions) from the optimisation loop, the plotting and the command line.
+- [x] Separate the model (pure functions) from the notebook: formulas and fixed inputs are in `v0/trackerUtils.py`.
+- [ ] Separate the optimisation loop, the plotting and the command line.
 - [ ] Print to stdout: the inputs echoed back, the optimised parameters in physical units, and the final
       metrics (significance, counts, angular resolution, channels). Progress goes to stderr so piping stays clean.
 - [ ] Add options for number of steps, learning rate, random seed and number of restarts.
