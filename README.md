@@ -285,6 +285,14 @@ Every input stands for real physical quantities. [PARAMETERS.md](PARAMETERS.md) 
 and to reference values from the Fermi-LAT instrument paper and the HERD proceedings, and lists the decisions
 needed before the values are applied.
 
+## Working on the notebook
+
+Notebook outputs (the figures are most of its size) are stripped from the commits with
+[nbstripout](https://github.com/kynan/nbstripout), so the repository stores only the notebook's source. Your working copy
+keeps its outputs. After cloning, run `pip install nbstripout` and `nbstripout --install` once in the repository to switch the
+filter on (`.gitattributes` already names the notebooks). The results are kept in text in [FINDINGS.md](FINDINGS.md) and
+`v0/designReport.txt`.
+
 ## Planned tooling
 
 Both projects are to become command-line scripts that read inputs from a text file and print results to the
