@@ -1,5 +1,11 @@
 # AutoDetOpt
 
+> **Status: work in progress.** This project uses automatic differentiation (JAX) to optimise the parameters of a
+> gamma-ray pair-conversion tracker, in particular the distribution and amount of tungsten foil. It is at an early
+> stage: the inputs are placeholders and the shape of the optimum has changed with each model improvement, so no
+> design conclusion should be drawn yet. See [FINDINGS.md](FINDINGS.md) for what has been learnt so far and
+> [ROADMAP.md](ROADMAP.md) for what is planned.
+
 Differentiable (autodiff) design optimisation of a pair-conversion tracker with an anticoincidence
 detector (ACD), in the spirit of the MODE collaboration's work on end-to-end optimisation of detectors.
 
@@ -267,9 +273,10 @@ stage and no conclusion about where the tungsten should go can be drawn yet.
 
 ## References
 
-Papers and web pages used for the numbers are kept in [references/](references), with a BibTeX bibliography in
-[references/bibliography.bib](references/bibliography.bib). Every number in the fixed inputs of `v0/trackerUtils.py` is
-followed by a comment with its source (a physical constant, a link, or "Placeholder").
+The papers and web pages used for the numbers are listed in a BibTeX bibliography,
+[references/bibliography.bib](references/bibliography.bib), with their DOI or link. The local copies are not versioned
+because they are third-party material. Every number in the fixed inputs of `v0/trackerUtils.py` is followed by a comment
+with its source (a physical constant, a link, or "Placeholder").
 
 ## Parameters
 
