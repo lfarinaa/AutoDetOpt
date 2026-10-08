@@ -99,7 +99,7 @@ All numbers are placeholders. Do not trust an optimum until they are set to real
   place a foil every third layer, with bare tracking planes in between. The fit-covariance model should remove
   it.
 
-### Power-law source and energy bounds (planned for v0)
+### Power-law source and energy bounds
 
 The monoenergetic photon is replaced by a power law, `dN/dE ~ E^-Gamma`, truncated at both ends:
 `E_min <= E <= E_max`, and zero outside. `Gamma = 2` as in the Fermi-LAT and HERD sensitivity definitions.
@@ -133,6 +133,17 @@ placeholders. The reasoning is recorded here so the bounds are not changed witho
    bound.
 - Starting value `E_max = 10 GeV`.
 
+**Implementation (the notebook uses the power law).** `sourceType = "powerLaw"` in `v0/trackerUtils.py` builds
+`numberOfEnergyBins = 8` logarithmic bins between `E_min` and `E_max`, 4 per decade as in the HERD proceedings. The
+energy is known perfectly (no migration), so each bin is its own set of conversion-layer classes. For each bin the
+model takes the share of each integral flux that falls in it, the PSF at the signal-weighted mean of `1/E^2` over the
+bin, and the sum over bins and layers of the spatial TS is the objective. In the Asimov dataset the best-fit power
+law is the true one, so this sum is the TS of the signal power-law fit against the background-only fit, as in
+Fermi-LAT. The diffuse (index 2.1, from the LAT paper) and charged (index 2.7, placeholder) backgrounds have their own
+spectra. The old monochromatic source is kept with `setSourceType("monochromatic")`, and it reproduces the previous
+numbers exactly (initial design: TS 229.8, no-label 210.3, cone 160.4). The three bound warnings are in
+`computeBoundWarnings` and are printed in the design report.
+
 **Flux normalisation (decided).** Each flux is the integral flux above `E_min`, so the existing numbers keep
 their meaning. The truncation at `E_max` then removes a small part of the stated flux, which is accounted for
 in the counts.
@@ -143,7 +154,7 @@ every recorded step and for the final design:
 - `E_min` is below the Compton and pair crossover of a converter material.
 - The tracker is too large for the upper bound: `X_tot > t_max(E_max)`. The optimiser can trigger this by
   growing converter thickness, and the layer count (scanned by hand) can trigger it too.
-- Fewer than about 10 expected signal photons above `E_max`.
+- More than about 10 expected signal photons above `E_max`: the truncation discards signal.
 
 **What the model needs.**
 - *Energy-dependent physics.* Pair cross section from tables, multiple scattering `~ 1/E`, opening angle

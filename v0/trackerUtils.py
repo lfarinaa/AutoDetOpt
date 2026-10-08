@@ -36,17 +36,34 @@ radiationLengthScintillator = 42.4     # cm. Physical constant: polyvinyltoluene
 pairConversionCoefficientPerRadiationLength = 7.0 / 9.0   # Physical constant: sigma = 7/9 A/(X0 N_A), PDG Eq. 34.32 [pdg2024passage] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-passage-particles-matter.pdf. Accurate to a few percent only down to 1 GeV, so optimistic at 100 MeV.
 
 numberOfLayers = 10                    # Discrete, so it is scanned by hand rather than optimised. Placeholder. Reference: LAT 18 x-y layers, 16 with tungsten [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.1; HERD FIT 7 double layers [farina2021herd] https://doi.org/10.22323/1.395.0651 section 2.
-photonEnergy = 100.0                   # MeV. Placeholder, to be replaced by a truncated power law (README). Fixed because there is no calorimeter: energy is not a free measurement.
+photonEnergy = 100.0                   # MeV. Only used by the monochromatic source (sourceType = "monochromatic"). Placeholder. The power-law source has an energy axis instead.
 electronMass = 0.511                   # MeV. Physical constant: electron mass, PDG https://pdg.lbl.gov/2024/
 detectorSideLength = 40.0              # cm. Placeholder. Reference: LAT is 1.8 m wide [atwood2009lat] https://arxiv.org/abs/0902.1089 Fig. 1. Decision pending (PARAMETERS.md).
 siliconThickness = 0.03                # cm, thickness of one silicon plane. Placeholder. Reference: LAT strip detectors are 400 µm = 0.04 cm [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.1.
 
 # Fluxes and observation conditions.
-signalPhotonFlux = 1e-3                # 1/(cm^2 s). Placeholder, very bright. Reference: 1e-7 above 100 MeV for a faint high-latitude source [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d.
+signalPhotonFlux = 1e-3                # 1/(cm^2 s), integral flux above energyMinimum for the power law. Placeholder, very bright. Reference: 1e-7 above 100 MeV for a faint high-latitude source [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d.
 diffusePhotonFlux = 1e-2               # 1/(cm^2 s) over the field of view. Placeholder. Reference: 1.5e-5 per cm^2 s sr above 100 MeV at high latitude, index 2.1 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note e.
 chargedParticleFlux = 1.0              # 1/(cm^2 s). Placeholder. Reference: about 0.1 inferred from the LAT raw trigger rate of 2-4 kHz over about 3.2e4 cm^2 [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.3.
 exposureDuration = 1e4                 # s. Placeholder. Reference: LAT 1-year survey [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d; HERD 1, 5 and 10 years [farina2021herd] https://doi.org/10.22323/1.395.0651 Fig. 3.
 fieldOfViewSolidAngle = 1.0            # sr. Placeholder. Reference: LAT 2.4 sr at 1 GeV [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.1.
+
+# Source spectrum, as in the Fermi-LAT and HERD sensitivity calculations: a power law dN/dE ~ E^-index truncated to [energyMinimum, energyMaximum]
+# and binned in energy. The energy is assumed known perfectly (no energy migration), so every energy bin is its own set of classes and the test
+# statistic is the sum over the bins. With the power-law source the three fluxes above are integral fluxes above energyMinimum. With the
+# monochromatic source they are total fluxes at photonEnergy, which reproduces the first version of the model.
+sourceType = "powerLaw"                # "powerLaw" or "monochromatic". The old monochromatic source is kept to compare with.
+energyMinimum = 100.0                  # MeV. Placeholder. Above the Compton and pair crossover with margin, see the README for the reasoning.
+energyMaximum = 10000.0                # MeV. Placeholder. Shower containment, statistics and backsplash, see the README for the reasoning.
+binsPerDecade = 4                      # Energy bins per decade, as in the HERD ICRC 2021 sensitivity [farina2021herd] https://doi.org/10.22323/1.395.0651 section 6.
+signalSpectralIndex = 2.0              # Index 2 power law, as in the Fermi-LAT sensitivity [fermilat2013performance] https://s3df.slac.stanford.edu/data/fermi/groups/canda/archive/pass8v6/lat_Performance.htm and HERD [farina2021herd] https://doi.org/10.22323/1.395.0651 section 6.
+diffuseSpectralIndex = 2.1             # Diffuse photon background, high-latitude index 2.1 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note e.
+chargedSpectralIndex = 2.7             # Charged cosmic-ray background. Placeholder, no source found (a steep power law).
+
+# Bounds of the energy range, checked against the design by computeBoundWarnings (not part of the loss).
+comptonPairCrossoverEnergy = 10.0      # MeV. Placeholder, from memory: Compton and pair production cross sections are equal at about 10 MeV in tungsten. To check against NIST XCOM.
+criticalEnergyTungsten = 7.97          # MeV. Physical constant: critical energy of tungsten for e- [pdg2024tungsten] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/tungsten_W.html
+showerMaximumPhotonOffset = 0.5        # C_gamma = +0.5 in t_max = ln(E/E_c) + C_gamma for a photon-induced shower, PDG Eq. 34.36 [pdg2024passage] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-passage-particles-matter.pdf
 
 # Constraints that keep the optimum finite. Without them the optimiser drives the strip pitch to its
 # lower bound and makes the detector as tall and channel-rich as allowed.
@@ -126,6 +143,45 @@ def mapUnboundedToPhysicalParameters(unboundedParameters):
 # ======================================================================================================
 # Layers below each layer, used both to decide if a track can be reconstructed and for the lever arm.
 numberOfLayersBelow = numberOfLayers - 1 - jnp.arange(numberOfLayers)
+numberOfEnergyBins = int(round(binsPerDecade * np.log10(energyMaximum / energyMinimum)))   # 10: logarithm base, mathematical.
+
+
+def computeEnergyGrid(sourceTypeName):
+    """Energy bins of the source: the energy that sets the PSF of each bin, and the share of each integral flux that falls in it."""
+    if sourceTypeName == "monochromatic":
+        return dict(psfEnergy=np.array([photonEnergy]), signalFraction=np.ones(1), diffuseFraction=np.ones(1), chargedFraction=np.ones(1))
+    edges = np.geomspace(energyMinimum, energyMaximum, numberOfEnergyBins + 1)
+
+    def fractionOfIntegralFluxInBin(index):
+        # The integral flux above energyMinimum of E^-index is proportional to energyMinimum^(1 - index) / (index - 1). The share in a bin follows.
+        return (edges[:-1] / energyMinimum) ** (1.0 - index) - (edges[1:] / energyMinimum) ** (1.0 - index)
+
+    # The PSF variance of a bin is its mean over the bin, weighted by the signal spectrum. It scales as 1/E^2, so the energy that sets
+    # the PSF of the bin is the one with 1/E^2 equal to the mean of 1/E^2. (The strip term does not depend on the energy.)
+    gamma = signalSpectralIndex
+    meanInverseEnergySquared = ((edges[:-1] ** (-gamma - 1.0) - edges[1:] ** (-gamma - 1.0)) / (gamma + 1.0)) / (
+        (edges[:-1] ** (1.0 - gamma) - edges[1:] ** (1.0 - gamma)) / (gamma - 1.0)
+    )
+    return dict(
+        psfEnergy=meanInverseEnergySquared ** -0.5,
+        signalFraction=fractionOfIntegralFluxInBin(signalSpectralIndex),
+        diffuseFraction=fractionOfIntegralFluxInBin(diffuseSpectralIndex),
+        chargedFraction=fractionOfIntegralFluxInBin(chargedSpectralIndex),
+    )
+
+
+def setSourceType(sourceTypeName):
+    """Choose "powerLaw" or "monochromatic". Call before the first call of a jitted function: they read these arrays when traced."""
+    global sourceType, binPsfEnergy, binSignalFraction, binDiffuseFraction, binChargedFraction
+    sourceType = sourceTypeName
+    energyGrid = computeEnergyGrid(sourceTypeName)
+    binPsfEnergy = jnp.asarray(energyGrid["psfEnergy"])
+    binSignalFraction = jnp.asarray(energyGrid["signalFraction"])
+    binDiffuseFraction = jnp.asarray(energyGrid["diffuseFraction"])
+    binChargedFraction = jnp.asarray(energyGrid["chargedFraction"])
+
+
+setSourceType(sourceType)
 
 
 def computeLayerMaterial(converterThickness):
@@ -181,21 +237,29 @@ def computeScatteringRadiationLengths(converterRadiationLengths):
     )
 
 
-def computePerLayerAngularVariance(converterRadiationLengths, layerSpacing, stripPitch):
-    """Angular variance (rad^2) of the reconstructed direction for a photon that converted in each layer."""
+def computePerLayerAngularVariance(converterRadiationLengths, layerSpacing, stripPitch, energy=None):
+    """Angular variance (rad^2) of the reconstructed direction for a photon of the given energy that converted in each layer."""
+    energy = photonEnergy if energy is None else energy   # The monochromatic energy by default.
     # Three independent contributions, added in quadrature (variances in rad^2), evaluated per conversion layer.
     # 1. Multiple scattering, Highland-Lynch-Dahl with the log term (PDG Eq. 34.16). PDG says to apply it once to the combined
     #    scatterer, because adding separate theta0 in quadrature is systematically too small. Each pair member carries half the energy.
     scatteringRadiationLengths = computeScatteringRadiationLengths(converterRadiationLengths)
     highlandLogCorrection = (1.0 + 0.038 * jnp.log(scatteringRadiationLengths)) ** 2   # 0.038: PDG Eq. 34.16 [pdg2024passage] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-passage-particles-matter.pdf
-    multipleScatteringVariance = (13.6 / (photonEnergy / 2.0)) ** 2 * scatteringRadiationLengths * highlandLogCorrection   # 13.6 MeV: same equation. 2.0: equal energy sharing, an approximation.
+    multipleScatteringVariance = (13.6 / (energy / 2.0)) ** 2 * scatteringRadiationLengths * highlandLogCorrection   # 13.6 MeV: same equation. 2.0: equal energy sharing, an approximation.
     # 2. Intrinsic opening angle of the pair.
-    pairOpeningAngleVariance = (electronMass / photonEnergy) ** 2   # m_e / E: characteristic scale of the pair opening angle, an approximation with no single source.
+    pairOpeningAngleVariance = (electronMass / energy) ** 2   # m_e / E: characteristic scale of the pair opening angle, an approximation with no single source.
     # 3. Strip resolution (pitch / sqrt(12) for a uniform hit distribution) over the lever arm to the last layer.
     leverArm = jnp.maximum(numberOfLayersBelow, 1) * layerSpacing   # cm
     stripResolutionVariance = 2.0 * (stripPitch / jnp.sqrt(12.0) / leverArm) ** 2   # 12: variance of a uniform distribution over one pitch is pitch^2/12, standard result (see PDG detectors review [pdg2024detectors] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-particle-detectors-accel.pdf). 2.0: toy factor, no source.
 
     return multipleScatteringVariance + pairOpeningAngleVariance + stripResolutionVariance
+
+
+def computePerLayerAngularVarianceInEnergyBins(converterRadiationLengths, layerSpacing, stripPitch):
+    """Angular variance (rad^2), one row per energy bin and one column per conversion layer."""
+    return jax.vmap(
+        lambda energy: computePerLayerAngularVariance(converterRadiationLengths, layerSpacing, stripPitch, energy)
+    )(binPsfEnergy)
 
 
 def computeEffectiveAngularVariance(converterRadiationLengths, conversionProbabilityPerLayer, layerSpacing, stripPitch):
@@ -252,18 +316,20 @@ def computeExpectedCounts(
 def computeCountsPerLayer(
     conversionProbabilityPerLayer, converterRadiationLengths, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction
 ):
-    """Expected signal and background counts over the field of view, for each true conversion layer."""
+    """Expected signal and background counts over the field of view: one row per energy bin and one column per true conversion layer."""
     exposureFactor = detectorSideLength**2 * exposureDuration * livetimeFraction
     probabilityPerLayer = conversionProbabilityPerLayer[:numberOfReconstructableLayers]
     # Share of the charged background in each class: follows the material of the layer (foil and silicon), not attenuated from above.
     materialPerLayer = (converterRadiationLengths + siliconThickness / radiationLengthSilicon)[:numberOfReconstructableLayers]
     chargedBackgroundLayerShare = materialPerLayer / jnp.sum(materialPerLayer)
-    signalCountPerLayer = signalPhotonFlux * exposureFactor * probabilityPerLayer * photonSurvivalProbabilityThroughAcd
-    backgroundCountPerLayer = exposureFactor * (
-        diffusePhotonFlux * probabilityPerLayer * photonSurvivalProbabilityThroughAcd
-        + chargedParticleFlux * (1.0 - vetoEfficiency) * chargedBackgroundLayerShare
+    signalCount = (
+        signalPhotonFlux * binSignalFraction[:, None] * exposureFactor * probabilityPerLayer[None, :] * photonSurvivalProbabilityThroughAcd
     )
-    return signalCountPerLayer, backgroundCountPerLayer
+    backgroundCount = exposureFactor * (
+        diffusePhotonFlux * binDiffuseFraction[:, None] * probabilityPerLayer[None, :] * photonSurvivalProbabilityThroughAcd
+        + chargedParticleFlux * binChargedFraction[:, None] * (1.0 - vetoEfficiency) * chargedBackgroundLayerShare[None, :]
+    )
+    return signalCount, backgroundCount
 
 
 def computeAsimovIntegrand(signalDensity, backgroundDensity):
@@ -291,8 +357,40 @@ def computeSpatialSignificanceSquared(signalCountPerLayer, backgroundCountPerLay
     return jnp.sum(integralPerClass)
 
 
+def computeSpatialTestStatistic(signalCountPerBinAndLayer, backgroundCountPerBinAndLayer, angularVariancePerBinAndLayer, confusionMatrix):
+    """Expected test statistic of the power-law source: the sum over the energy bins of the per-bin spatial TS (no energy migration).
+
+    With the best-fit power law equal to the true one in the Asimov dataset, this is the TS of the fit of the signal power law
+    against the background-only fit, as in Fermi-LAT.
+    """
+    return jnp.sum(jax.vmap(computeSpatialSignificanceSquared, in_axes=(0, 0, 0, None))(
+        signalCountPerBinAndLayer, backgroundCountPerBinAndLayer, angularVariancePerBinAndLayer, confusionMatrix
+    ))
+
+
+def computeConeCheck(conversionProbabilityPerLayer, angularVariancePerBinAndLayer, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction):
+    """Single-cone check, one averaged Gaussian and a cone of fixed radius in each energy bin. Returns the TS summed over the bins and the counts in the cones."""
+    exposureFactor = detectorSideLength**2 * exposureDuration * livetimeFraction
+    probabilityPerLayer = conversionProbabilityPerLayer[:numberOfReconstructableLayers]
+    totalConversionProbability = jnp.sum(probabilityPerLayer)
+    effectiveVariancePerBin = jnp.sum(probabilityPerLayer[None, :] * angularVariancePerBinAndLayer, axis=1) / totalConversionProbability
+    signalContainmentFraction, backgroundFractionInsideCone = computeSignalConeFractions(effectiveVariancePerBin)
+    signalCountPerBin = (
+        signalPhotonFlux * binSignalFraction * exposureFactor * totalConversionProbability
+        * photonSurvivalProbabilityThroughAcd * signalContainmentFraction
+    )
+    backgroundCountPerBin = exposureFactor * backgroundFractionInsideCone * (
+        diffusePhotonFlux * binDiffuseFraction * totalConversionProbability * photonSurvivalProbabilityThroughAcd
+        + chargedParticleFlux * binChargedFraction * (1.0 - vetoEfficiency)
+    )
+    coneTestStatistic = jnp.sum(computeAsimovSignificance(signalCountPerBin, backgroundCountPerBin) ** 2)
+    return coneTestStatistic, jnp.sum(signalCountPerBin), jnp.sum(backgroundCountPerBin)
+
+
 def computeContainmentRadii(signalCountPerLayer, angularVariancePerLayer, containmentFractions=(0.68, 0.95)):   # Conventional PSF68 and PSF95 of Fermi-LAT [atwood2009lat] https://arxiv.org/abs/0902.1089
     """Containment radii (degrees) of the signal PSF, a mixture over conversion layers. Reported only, not optimised."""
+    signalCountPerLayer = jnp.ravel(signalCountPerLayer)   # Energy bins and layers together: the PSF is a mixture over both.
+    angularVariancePerLayer = jnp.ravel(angularVariancePerLayer)
     radius = jnp.geomspace(radialGridMinimum, fieldOfViewRadius, radialGridPoints)
     weights = signalCountPerLayer / jnp.sum(signalCountPerLayer)
     containment = jnp.sum(
@@ -327,29 +425,26 @@ def computeDetectorResponse(unboundedParameters):
     vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction = computeAcdResponse(acdThickness, acdThreshold)
 
     # Objective: each conversion layer is a pseudo-detector with its own PSF, and the spatial likelihood ratios add.
-    angularVariancePerLayer = computePerLayerAngularVariance(
+    angularVariancePerLayer = computePerLayerAngularVarianceInEnergyBins(
         converterRadiationLengths, layerSpacing, stripPitch
-    )[:numberOfReconstructableLayers]
+    )[:, :numberOfReconstructableLayers]   # One row per energy bin.
     signalCountPerLayer, backgroundCountPerLayer = computeCountsPerLayer(
         conversionProbabilityPerLayer, converterRadiationLengths, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction
     )
-    significanceSquared = computeSpatialSignificanceSquared(
+    significanceSquared = computeSpatialTestStatistic(
         signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, labelConfusionMatrix
     )
-    significanceSquaredNoLabel = computeSpatialSignificanceSquared(
+    significanceSquaredNoLabel = computeSpatialTestStatistic(
         signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, noLabelConfusionMatrix
     )
     psf68, psf95 = computeContainmentRadii(signalCountPerLayer, angularVariancePerLayer)
 
     # Single-cone check: one averaged Gaussian and a cone of fixed radius. Not used by the loss.
-    effectiveAngularVariance = computeEffectiveAngularVariance(
-        converterRadiationLengths, conversionProbabilityPerLayer, layerSpacing, stripPitch
+    coneTestStatistic, signalCount, backgroundCount = computeConeCheck(
+        conversionProbabilityPerLayer, angularVariancePerLayer, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction
     )
-    signalContainmentFraction, backgroundFractionInsideCone = computeSignalConeFractions(effectiveAngularVariance)
-    signalCount, backgroundCount = computeExpectedCounts(
-        totalConversionProbability, signalContainmentFraction, backgroundFractionInsideCone,
-        vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction,
-    )
+    # Signal-weighted mean variance over the energy bins and layers, for the single number "angular resolution".
+    effectiveAngularVariance = jnp.sum(signalCountPerLayer * angularVariancePerLayer) / jnp.sum(signalCountPerLayer)
 
     constraintPenalty, numberOfChannels = computeConstraintPenalty(stripPitch, layerSpacing)
     totalSignalPhotons = jnp.sum(signalCountPerLayer)
@@ -358,10 +453,10 @@ def computeDetectorResponse(unboundedParameters):
     return dict(
         testStatistic=significanceSquared,                 # The objective: expected TS, which is Z^2.
         testStatisticNoLabel=significanceSquaredNoLabel,
-        coneTestStatistic=computeAsimovSignificance(signalCount, backgroundCount) ** 2,
+        coneTestStatistic=coneTestStatistic,
         significance=jnp.sqrt(significanceSquared),        # Z = sqrt(TS), kept for comparison with the old figure of merit.
         significanceNoLabel=jnp.sqrt(significanceSquaredNoLabel),
-        coneSignificance=computeAsimovSignificance(signalCount, backgroundCount),
+        coneSignificance=jnp.sqrt(coneTestStatistic),
         signalCount=signalCount,                  # Single-cone check.
         backgroundCount=backgroundCount,          # Single-cone check.
         totalSignalPhotons=totalSignalPhotons,
@@ -404,3 +499,23 @@ scalarMetricNames = (
 def computeMetrics(unboundedParameters):
     return computeDetectorResponse(unboundedParameters)
 
+
+def computeBoundWarnings(unboundedParameters):
+    """Checks of the energy bounds against a design, as plain-text warnings. Not part of the loss, so the gradients stay clean."""
+    warningMessages = []
+    if sourceType != "powerLaw":
+        return warningMessages
+    physicalParameters = mapUnboundedToPhysicalParameters(unboundedParameters)
+    converterRadiationLengths = computeLayerMaterial(physicalParameters["converterThickness"])[0]
+    if energyMinimum < comptonPairCrossoverEnergy:
+        warningMessages.append(f"energyMinimum = {energyMinimum:.0f} MeV is below the Compton and pair crossover ({comptonPairCrossoverEnergy:.0f} MeV): the pair model does not describe the events.")
+    trackerRadiationLengths = float(jnp.sum(converterRadiationLengths + siliconThickness / radiationLengthSilicon))
+    showerMaximumDepth = float(np.log(energyMaximum / criticalEnergyTungsten) + showerMaximumPhotonOffset)
+    if trackerRadiationLengths > showerMaximumDepth:
+        warningMessages.append(f"the tracker is too large for energyMaximum = {energyMaximum:.0f} MeV: it has {trackerRadiationLengths:.2f} radiation lengths against a shower maximum at {showerMaximumDepth:.2f}. The highest-energy photons shower inside it and the two-track pair model fails.")
+    # Signal photons that the truncation at energyMaximum discards: the tail above it relative to the part inside, from the power law.
+    tailShare = (energyMaximum / energyMinimum) ** (1.0 - signalSpectralIndex)
+    photonsAboveMaximum = float(computeDetectorResponse(unboundedParameters)["totalSignalPhotons"]) * tailShare / (1.0 - tailShare)
+    if photonsAboveMaximum > minimumSignalPhotons:
+        warningMessages.append(f"the truncation at energyMaximum discards about {photonsAboveMaximum:.0f} expected signal photons (more than {minimumSignalPhotons:.0f}).")
+    return warningMessages

@@ -28,8 +28,9 @@ Foil thickness per layer, layer 0 at the top. Only the layers that can be a conv
 | 5 | Scratch test: hard window of 2 or 3 layers for the scattering | cone, no labels, labels | foils every third layer, for example 11, 822, 241, 10, 10, 1526, 369 µm | **comb** (first sighting) |
 | 6 | New scattering model (3 hits, own silicon, log term, expected conversion depth), even split of the charged background | labelled spatial TS | 1999 µm in layer 0 (the upper bound), then bare layers | **super front-loaded** (one slab), partly a loophole (see 2.3) |
 | 7 | As 6 with the charged background following the material of each layer | labelled spatial TS | best basin: 1449, 10, 11, 1260, 11, 10, 881, 235 µm | **one thick foil in every third layer** (comb) |
+| 8 | As 7 with the power-law source (index 2, 100 MeV to 10 GeV, 8 energy bins, no energy migration) | TS summed over energy bins and layers | best of 10 restarts: 1992, 10, 10, 1998, 10, 10, 1995, 677 µm (TS 9770). The single notebook run: 1515, 1029, 10, 10, 1999, 10, 10, 1999 µm (TS 9616) | **comb again, with several foils at the 0.2 cm upper bound** |
 
-So we have seen back-loaded, front-loaded, super front-loaded and one-in-three comb optima. Row 4 shows that the
+So we have seen back-loaded, front-loaded, super front-loaded and one-in-three comb optima. Row 8 shows that adding the energy axis alone did not remove the comb: it moved the thick foils to the placeholder upper bound. Row 4 shows that the
 sign of the slope is controlled by a single toy input, `downstreamScatteringWeight`, which has no source. LAT's
 design is thin in front and thick in the back, which agrees with rows 1 and 4 and disagrees with rows 2, 3, 6, 7.
 It is also an energy trade-off, and v0 is monoenergetic.
@@ -94,11 +95,48 @@ Ten random restarts, current model (test statistic TS, best first):
   expected curvature of the sky, a 2 sigma cone loses the expected factor of 1.156, autodiff matches finite
   differences, and classes with labels beat the same sample without.
 
+## 4b. The power-law source (row 8)
+
+The notebook now uses a power-law source: index 2, 100 MeV to 10 GeV in 8 bins (4 per decade), with the energy known
+perfectly (no migration). The TS is the sum over the energy bins and layers, which is the TS of a power-law fit against
+the background-only fit. The monochromatic source is kept and reproduces the earlier numbers exactly
+(initial design TS 229.8, no-label 210.3, cone 160.4, signal photons 12664.9, PSF68 25.53).
+
+- **Scale:** TS rose from 7189 at the initial design to 9616 in the single run (Z = 98), and to 9770 at best over 10
+  restarts. That is far above the detection threshold of 25, because the placeholder source is so bright.
+- **Consistency:** the labelled, no-label and single-cone TS rise together (9616, 9330 and 7892 at the optimum), and the
+  labelled and no-label values are close, so the loopholes of section 2 are not active.
+- **Restarts (10, power law):** six basins within 1.6% of each other.
+
+| Basin | TS | Found by | Foils [µm], layers 0 to 7 |
+|---|---|---|---|
+| A | 9769.5 | 2 of 10 | 1992, 10, 10, 1998, 10, 10, 1995, 677 |
+| B | 9767.7 | 2 of 10 | 2000, 10, 11, 2000, 10, 10, 1991, 676 |
+| C | 9666.5 | 1 of 10 | 1998, 10, 10, 1716, 1034, 10, 10, 1999 |
+| D | 9616.8 | 3 of 10 | 1514, 1029, 10, 10, 1999, 10, 10, 1999 |
+| E | 9615.8 | 1 of 10 | 1514, 1029, 10, 10, 2000, 10, 10, 1998 |
+| F | 9612.8 | 1 of 10 | 1516, 1031, 10, 10, 1999, 10, 10, 1999 |
+
+- **The spread is narrower than before in relative terms (1.6% against 7%), but the foil patterns still differ strongly.**
+- **Several bounds bind at once.** Many foils are at the 0.2 cm placeholder upper bound, the layer spacing is at the
+  height budget (stack height 30.0 cm of 30 cm), and the ACD is near its 3 cm upper bound. These placeholders shape the
+  optimum, so the pattern says little yet about where the tungsten should go.
+- **The strip pitch is now a real parameter.** At 100 MeV it was pinned by the channel budget and irrelevant (multiple
+  scattering was 99.8% of the variance). With a spectrum up to 10 GeV the PSF of the highest bins is a fraction of a
+  degree, the strip term matters, and the pitch settles at 169 µm with 47,457 of 50,000 channels, below the budget.
+- **The bound warnings work.** With all foils at the upper bound and `energyMaximum` lowered to 1 GeV the
+  tracker-too-large warning fires (5.74 radiation lengths against a shower maximum at 5.33). With the real 10 GeV it
+  does not fire, because the stack is far thinner than the shower maximum (7.6 radiation lengths). The only warning for
+  the real design is that the truncation at 10 GeV discards about 114 to 148 expected signal photons, because the
+  source is so bright.
+
 ## 5. What has been stable
 
 Only the quantities that are pinned by a bound or budget: the ACD thickness (at its 3 cm upper bound) and the strip
-pitch (160 to 180 µm, set by the channel budget). The total conversion probability has stayed between 0.4 and 0.6,
-and PSF68 near 10 to 14 degrees, but these also moved with every model change.
+pitch (160 to 180 µm, set by the channel budget). The total conversion probability has stayed between 0.4 and 0.8,
+and PSF68 near 9 to 14 degrees, but these also moved with every model change. With the power-law source the layer spacing
+is also pinned (the 30 cm height budget) and several foils sit at the 0.2 cm placeholder upper bound. The strip pitch is
+the exception: it is no longer set by the channel budget.
 
 ## 6. What would make the foil placement trustworthy
 

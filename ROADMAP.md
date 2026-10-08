@@ -42,11 +42,11 @@ The output can be piped to a file by the caller, so the script writes nothing it
 - [x] Add a soft constraint of at least 10 signal photons, as in the Fermi sensitivity definition.
 - [x] Report PSF68 and PSF95 as outputs.
 - [ ] Add angle (`1/cos(theta)` path length, theta-dependent PSF and effective area) as a quadrature axis.
-- [ ] Replace the monoenergetic photon with a power law (`Gamma = 2`) truncated at `E_min` and `E_max`
+- [x] Replace the monoenergetic photon with a power law (`Gamma = 2`) truncated at `E_min` and `E_max`
       (placeholders 100 MeV and 10 GeV). See "Power-law source and energy bounds" in the README.
-- [ ] Add energy as a quadrature axis (log-spaced bins, 4 per decade), with tabulated cross sections,
-      multiple scattering `~ 1/E` and opening angle `~ m_e / E`.
-- [ ] Check the bounds with warnings (to stderr, not part of the loss): `E_min` below the Compton and pair
+- [x] Add energy as an axis (log-spaced bins, 4 per decade) with multiple scattering `~ 1/E` and the opening angle
+      `~ m_e / E`. Still to do: tabulated cross sections.
+- [x] Check the bounds with warnings (to stderr, not part of the loss): `E_min` below the Compton and pair
       crossover, tracker material `X_tot > t_max(E_max)`, fewer than about 10 expected signal photons above
       `E_max`.
 - [ ] Look up and record the Compton and pair crossover energies and the critical energies of tungsten and
@@ -54,7 +54,7 @@ The output can be piped to a file by the caller, so the script writes nothing it
 - [ ] Quantify how far the `7/9` conversion coefficient is from the tabulated pair cross section at `E_min`.
 - [ ] Default: energy is known perfectly (identity assignment, no energy confusion). Later: add an
       energy-assignment matrix and a calorimeter design, and check the no-energy (mixture) limit.
-- [ ] Give the diffuse photon and charged-particle backgrounds their own spectra.
+- [x] Give the diffuse photon and charged-particle backgrounds their own spectra (indices 2.1 and 2.7).
 - [ ] Add Compton and photoelectric interactions.
 - [ ] Add a second charged species, with tracker-based rejection.
 - [x] Multiple scattering: expected conversion depth in the foil, own-layer silicon, full weight on the layers that

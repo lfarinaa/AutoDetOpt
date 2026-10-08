@@ -51,6 +51,22 @@ them are in [references/](references):
 | Strip hit efficiency | Efficiency of one strip plane | Not in the model | LAT above 99% per plane, noise occupancy 1e-6 | See below. |
 | `signalConeRadiusInSigma` | Analysis cut | 2 | Not an instrument parameter | Only used by the single-cone check. |
 
+## Source spectrum (power-law source)
+
+| Input | Stands for | Current | Reference | Note |
+|---|---|---|---|---|
+| `sourceType` | Source model | `"powerLaw"` | | `"monochromatic"` is kept, with `photonEnergy` = 100 MeV, and reproduces the earlier numbers. |
+| `energyMinimum` | Lower edge of the range | 100 MeV | Above the Compton and pair crossover (about 10 MeV in tungsten, from memory) | Placeholder. |
+| `energyMaximum` | Upper edge of the range | 10 GeV | Shower containment: `t_max = ln(E/E_c) + 0.5` [pdg2024passage] | Placeholder. |
+| `binsPerDecade` | Energy bins | 4 | HERD sensitivity, 4 bins per decade [farina2021herd] | |
+| `signalSpectralIndex` | Source spectrum | 2.0 | Fermi-LAT and HERD sensitivity use an index 2 power law | |
+| `diffuseSpectralIndex` | Diffuse photon spectrum | 2.1 | LAT Table 1 note e [atwood2009lat] | |
+| `chargedSpectralIndex` | Charged cosmic-ray spectrum | 2.7 | No source found | Placeholder. |
+| `criticalEnergyTungsten` | Shower scale | 7.97 MeV | PDG, e- [pdg2024tungsten] | |
+| `comptonPairCrossoverEnergy` | Energy where pair production equals Compton | 10 MeV | From memory | To check against NIST XCOM. |
+
+With the power law the three fluxes are integral fluxes above `energyMinimum`.
+
 ## Things the model lacks that real parameters would feed
 
 - **Hit efficiency and the confusion matrix.** LAT quotes above 99% per plane, and says that missing one of the
