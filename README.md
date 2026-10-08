@@ -248,6 +248,12 @@ full simulation), at the optimised design and at a few perturbed points.
 
 ---
 
+## Findings
+
+[FINDINGS.md](FINDINGS.md) is a running log of what the optimisation has told us, including the artifacts we found
+and the fact that the shape of the optimum has changed qualitatively with each model improvement. v0 is at an early
+stage and no conclusion about where the tungsten should go can be drawn yet.
+
 ## References
 
 Papers and web pages used for the numbers are kept in [references/](references), with a BibTeX bibliography in

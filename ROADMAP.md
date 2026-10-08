@@ -91,5 +91,8 @@ The output can be piped to a file by the caller, so the script writes nothing it
 
 ## Housekeeping
 
+- [ ] Keep [FINDINGS.md](FINDINGS.md) up to date: add an entry whenever the optimum changes shape or an artifact is found.
+- [ ] Restart protocol: report the basins and the spread of the random restarts for every model change, never a single run.
+
 - [ ] Decide whether the notebooks are kept next to the scripts or archived.
 - [ ] Set realistic values for all placeholder inputs and record their sources.
