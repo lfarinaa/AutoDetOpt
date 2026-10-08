@@ -161,6 +161,27 @@ layers add up to `1 - exp(-kappa X)` (0.704395, as expected).
 - **Still missing:** the pair's radiative energy loss in the foils (a 0.57 X0 foil takes about 40% of the energy on average,
   and the scattering uses a constant E/2), and PSF tails from conversions in the passive material.
 
+## 4d. Monochromatic 10 GeV test (a scratch run, not in the notebook)
+
+Same model as row 9, with `sourceType = "monochromatic"` and `photonEnergy = 10 GeV`. The three fluxes are then total fluxes
+at that energy (signal 1e-3, diffuse 1e-2, charged 1.0), so the TS is not comparable with the power-law values. One
+default-start run and 10 random restarts.
+
+- **Result:** TS 97,021 at the initial design and 118,051 at the optimum (Z = 344), total conversion 0.913, PSF68 0.26 degrees.
+- **Foils [µm], layers 0 to 7:** 1998, 599, 1, 1997, 1991, 4, 1997, 1999. Five of the eight conversion layers are at the 0.2 cm
+  placeholder bound, layer 1 is at about 600 µm, and only layers 2 and 5 are bare.
+- **The landscape is much flatter than for the power law.** Nine basins, but the six best (TS 118,046 to 117,988) are the same
+  pattern within 0.05%. The other three are 0.4% lower, with a different pattern. For the power law we had seven basins
+  over a 5% spread with different patterns.
+- **Other settings:** layer spacing at the height budget (30.0 cm), strip pitch 160 µm with 50,195 channels (just over the
+  50,000 budget, which is a soft penalty), ACD 2.48 cm, threshold 0.44 MeV, veto efficiency 0.974.
+- **The foil bound limits the tracker, not the shower rule.** The tracker has 3.16 radiation lengths against a shower maximum at
+  10 GeV of 7.63, so the bound-limited foil thickness stops it far below the shower limit.
+- **Reading:** at 10 GeV multiple scattering is cheap, so the optimiser wants as much tungsten as the bound allows. The comb found
+  with the power law is therefore driven by the low-energy bins. The two bare layers that persist at 10 GeV, where scattering
+  is small, are a candidate artifact of the window scattering model (a foil in the next two layers adds full-weight scattering),
+  to be rechecked with the Kalman model.
+
 ## 5. What has been stable
 
 Only the quantities that are pinned by a bound or budget: the ACD thickness (at its 3 cm upper bound) and the strip
