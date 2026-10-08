@@ -34,7 +34,7 @@ them are in [references/](references):
 | Radiation lengths | W, Si, scintillator | 0.3504, 9.37, 42.4 cm | W 0.3504 cm [pdg2024tungsten] and Si 9.370 cm [pdg2024silicon] match PDG. Polyvinyltoluene scintillator 42.54 cm [pdg2024pvt] (polystyrene 41.31 cm) | Update the scintillator value to 42.54 cm. |
 | `7/9` coefficient | High-energy pair conversion limit | 7/9 | Physical constant, PDG Eq. 34.32 [pdg2024passage] | PDG says it is accurate to a few percent only down to 1 GeV, so it is optimistic at the 100 MeV lower bound. |
 | `numberOfLayers` | x-y layers | 10 | LAT 18 (16 with foils, 2 bare), HERD FIT 7 double layers | |
-| `minimumDownstreamLayersForReconstruction` | Layers needed after the conversion | 3 | HERD: at least 3 hits per particle in each of X/Y, which rejects conversions in the last two double layers, so 2 | Suggest 2 for HERD. **decision** |
+| `hitsRequiredForTracking` | Hits a track needs | 3 | HERD: at least 3 hits per particle in each of X and Y [farina2021herd]. LAT: the first 2 planes after the conversion [atwood2009lat] | The conversion layer and the two layers below. Gives `minimumDownstreamLayersForReconstruction = 2` (was a placeholder 3) and 2 full-weight layers in the scattering. |
 | `siliconThickness` | Silicon per layer | 0.03 cm (one plane) | LAT SSD 400 µm = 0.04 cm, and a layer has two planes (x and y) | The model counts one plane per layer. A layer of two planes would be 0.08 cm. HERD's FIT is scintillating fibre, not silicon. |
 | `detectorSideLength` | Active tracker width | 40 cm | LAT 1.8 m x 1.8 m x 0.72 m (whole instrument), tower of 4 x 8.95 cm SSDs | **decision**: instrument scale. |
 | `maximumHeight` | Tracker height budget | 30 cm | LAT 0.72 m for the whole instrument | No source for the tracker alone. **decision** |
@@ -57,9 +57,11 @@ them are in [references/](references):
   first hits after a conversion costs about a factor 2 in resolution at 100 MeV and gives PSF tails. That is the
   physical origin of off-diagonal terms in the confusion matrix `C[assigned, true]`: a missed first hit moves
   a conversion to the next layer. It gives a first, grounded confusion matrix to replace the identity.
-- **Tracker charged leakage `epsilon`.** Hit inefficiency alone gives a very small leak into deeper classes
-  (a charged track must miss every upstream plane). The larger leaks come from interactions and delta rays in
-  the tracker, and from tracks that skip the top. This one is open and needs an estimate for HERD.
+- **Charged background after the ACD.** Decided: nothing rejects it afterwards, so the tracker gives no further
+  rejection, and it is split evenly over the conversion-layer classes (assumption, no source). A later model
+  could add a real tracker rejection. That needs the single-plane efficiency (LAT: above 99% per plane), the
+  topology cut with its photon efficiency, and the share of tracks entering through the top, which needs
+  directions.
 - **ACD hermeticity.** LAT: tiles under 1000 cm2, overlapped in one direction, fibre ribbons over the other
   gaps, light collection above 95% over a tile and above 75% within 1-2 cm of the edges. Needs angle.
 - **Backsplash.** LAT requirement: self-veto must not reject more than 20% of photons at 300 GeV. EGRET lost
@@ -74,4 +76,4 @@ them are in [references/](references):
 3. **Optimistic or realistic.** For passive material, ACD efficiency and pitch: the LAT value, or something
    better where an upgrade is plausible?
 4. **Reparametrise the ACD threshold in MIP units?**
-5. **`epsilon` for the tracker's charged rejection**, or a charged column for the confusion matrix.
+5. **Tracker charged rejection** (currently none, by decision), later with its photon efficiency.

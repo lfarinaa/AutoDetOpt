@@ -30,10 +30,13 @@ The output can be piped to a file by the caller, so the script writes nothing it
 - [x] Set the lower bound of `converterThickness` to a small positive value (placeholder `1e-3 cm`), because
       passive material always converts some photons. No empty classes. Later derive it from a passive-material
       budget.
-- [x] Charged-particle background split: all in the first layer (decided). See the open issue below.
-- [ ] **Open issue: perfect labels plus charged background in layer 0 makes the tracker a perfect charged-particle
-      rejector, so the ACD becomes redundant in the optimum.** Decide how the charged background leaks into the
-      other classes (leakage fraction, or a charged row in the confusion matrix) before trusting any ACD result.
+- [x] Charged-particle background: nothing rejects it after the ACD (decided), split evenly over the classes,
+      independent of the design. Earlier choices (all in layer 0, or spread like the photons) gave the tracker a
+      free perfect veto or made the charged particles behave like gammas.
+- [ ] Later: give the tracker a real charged rejection (plane efficiency, topology cut) together with the photon
+      efficiency of that cut, and directions (side entry), so that the rejection is not free.
+- [ ] Check that the labelled, no-label and single-cone significances move in the same direction during
+      optimisation, and warn when they do not.
 - [ ] Keep the old cone objective for a side-by-side check, then remove it.
 - [x] Add a soft constraint of at least 10 signal photons, as in the Fermi sensitivity definition.
 - [x] Report PSF68 and PSF95 as outputs.
@@ -53,7 +56,12 @@ The output can be piped to a file by the caller, so the script writes nothing it
 - [ ] Give the diffuse photon and charged-particle backgrounds their own spectra.
 - [ ] Add Compton and photoelectric interactions.
 - [ ] Add a second charged species, with tracker-based rejection.
-- [ ] Replace the resolution formulas with a Fisher or Kalman covariance.
+- [x] Multiple scattering: expected conversion depth in the foil, own-layer silicon, full weight on the layers that
+      carry the fitted hits, log correction, applied once to the combined scatterer.
+- [x] Objective: the test statistic TS (Fermi-LAT), with the old significance loss kept.
+- [ ] Replace the resolution formulas with a Fisher or Kalman covariance. This also removes the toy weight below
+      the fitted hits, the comb-shaped optimum (a foil every third layer), and adds the average over the two
+      tracks, the real energy sharing of the pair and the hit correlations.
 - [ ] Add a PSF with non-Gaussian tails (for example a King function).
 - [ ] Free background normalisation in the likelihood ratio (profile likelihood).
 - [ ] Add the missing trade-offs that stop parameters running to their bounds (backsplash, mass, cost).

@@ -51,6 +51,10 @@ All numbers are placeholders. Do not trust an optimum until they are set to real
   `Z^2 = integral of 2 [(s + b) ln(1 + s/b) - s] dA`, with `s(r)` the signal density (flux times PSF) and `b`
   the background density. This is how Fermi-LAT sensitivities are computed (median TS = 25 for 5 sigma, at
   least 10 photons), and what the HERD ICRC 2021 sensitivity does through the Fermi tools.
+- **The objective is the test statistic.** Following Fermi-LAT, the figure of merit is the expected test statistic
+  `TS = 2 ln(L(signal + background) / L(background))`, which is `Z^2` of the spatial integral, and the optimiser
+  maximises `ln TS`. A 5 sigma detection is `TS = 25`. This has the same optimum as the old significance `Z`
+  (the penalty weight is doubled to compensate), and the old loss is kept as `computeLossFromSignificance`.
 - **Each conversion layer is its own pseudo-detector.** Photons are classified by conversion layer, as in
   Fermi-LAT event types (PSF0-3). Class `l` has its own signal `S * p_l`, its own PSF (from the per-layer
   angular variance) and its own background `b_l`. The objective is the sum over classes of the spatial
@@ -67,16 +71,30 @@ All numbers are placeholders. Do not trust an optimum until they are set to real
   the integral. A design with bare layers at the front can then preserve the PSF of photons that convert
   deeper. The bound should later come from a passive-material budget.
 - **Background per class.** The diffuse photon background follows the conversion probabilities. The
-  charged-particle background that leaks through the ACD is assigned entirely to the first layer, because a
-  charged track has hits from the top. **Consequence found in the first implementation:** together with
-  perfect labels, this lets the optimiser sacrifice layer 0 as a dump for all the charged background
-  (about 8e6 counts, `Z^2 = 0` for that class) and use the other six classes as clean detectors. The tracker
-  then rejects charged particles perfectly and the ACD is nearly redundant: thickness at its lower bound,
-  threshold at its upper bound, veto efficiency about 0.48. This is a property of the idealised inputs, not a
-  design result. A leakage of charged background into the other classes is needed before trusting any ACD
-  result. Not decided.
-- **Reconstructable layers only.** The last `minimumDownstreamLayersForReconstruction = 3` layers cannot be a
-  conversion layer, so there are `numberOfLayers - 3 = 7` classes. This is a fixed mask, not an empty class.
+  charged-particle background that gets through the ACD is final: nothing rejects it afterwards (decided). It is
+  a minimum-ionising particle crossing the whole instrument, so the foils neither attenuate it nor change its
+  total rate. Which class it falls in is an assumption (no source): it fakes a conversion by interacting in the
+  material of a layer (delta rays, bremsstrahlung, hadronic), so its share follows the radiation lengths of each
+  layer (foil and silicon), not the conversion probability.
+  **History of this choice:** (1) all in layer 0 with perfect labels gave a free perfect veto, and the optimiser
+  abandoned the ACD. (2) Spread like the photons made it behave like a gamma in the tracker (attenuated,
+  tied to the pair-conversion coefficient) and like a proton in the ACD. (3) An even split over the classes was
+  exploitable: with all the signal in one class, perfect labels removed 7/8 of the charged background for free
+  (labelled TS 30 against 16 without labels). The material-proportional share removes these loopholes: the
+  labelled, no-label and single-cone numbers rise together (TS 598, 513 and 347 at the optimum).
+- **Reconstructable layers only.** A track needs `hitsRequiredForTracking = 3` hits: the conversion layer and the
+  two layers below (HERD: at least 3 hits per particle; LAT: the first 2 planes after the conversion must be
+  measured). So the last `minimumDownstreamLayersForReconstruction = 2` layers cannot be a conversion layer,
+  and there are `numberOfLayers - 2 = 8` classes. This is a fixed mask, not an empty class.
+- **Multiple scattering.** One Highland-Lynch-Dahl term with the log correction, applied once to the combined
+  scatterer (PDG: adding separate `theta0` in quadrature is systematically too small). The scatterer is: the rest
+  of its own foil, with the conversion depth averaged over the absorption profile `exp(-kappa t)` (exact, and
+  `x/2` only for thin foils); the silicon of its own layer; the next two layers (foil and silicon) at full
+  weight, because they carry the fitted hits; and everything below at the toy weight `1/3`. Still missing: the
+  average over the two tracks, the real energy sharing of the pair (equal sharing is assumed), and the hit-by-hit
+  correlation of a track fit. **Known artifact:** the hard window of two full-weight layers makes the optimiser
+  place a foil every third layer, with bare tracking planes in between. The fit-covariance model should remove
+  it.
 
 ### Power-law source and energy bounds (planned for v0)
 
