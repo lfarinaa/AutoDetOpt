@@ -8,12 +8,14 @@ Created 2026-10-08.
 
 ## Status in one paragraph
 
-**v0 is at an early stage.** The shape of the optimal converter distribution has changed qualitatively with almost
-every modelling improvement: back-loaded, front-loaded, super front-loaded (one slab), and now one thick foil in
-every third layer. Several nearly equal optima coexist (random restarts end in at least five different designs
-within 7% of each other in test statistic). This instability under minor improvements is itself the finding: **no
-conclusion about where the tungsten should go can be drawn yet.** The only quantities that stayed put are those
-pinned by a bound or a budget (see "What has been stable").
+**v0 is still at an early stage, but the picture changed.** With the earlier window heuristic for the PSF, the shape of the
+optimal converter distribution changed qualitatively with almost every modelling improvement (back-loaded, front-loaded,
+super front-loaded, one foil in every third layer), and random restarts ended in many different designs. **The Kalman PSF
+model removed that instability** (row 10, section 4e): the comb is gone, the restarts collapse onto one design, and the
+foils increase smoothly with depth, thin in front and thick at the back. So the heuristic PSF was the root cause of the
+multimodality, as suspected. The result is more credible, but not yet a design: the two thickest foils are still pinned at
+the 0.2 cm placeholder bound, the reconstruction is idealised (ideal hit efficiency, no pattern recognition), and the
+inputs are placeholders. Sections 1 to 4d describe the window-heuristic model.
 
 ## 1. How the converter profile changed with the model
 
@@ -30,6 +32,7 @@ Foil thickness per layer, layer 0 at the top. Only the layers that can be a conv
 | 7 | As 6 with the charged background following the material of each layer | labelled spatial TS | best basin: 1449, 10, 11, 1260, 11, 10, 881, 235 µm | **one thick foil in every third layer** (comb) |
 | 8 | As 7 with the power-law source (index 2, 100 MeV to 10 GeV, 8 energy bins, no energy migration) | TS summed over energy bins and layers | best of 10 restarts: 1992, 10, 10, 1998, 10, 10, 1995, 677 µm (TS 9770). The single notebook run: 1515, 1029, 10, 10, 1999, 10, 10, 1999 µm (TS 9616) | **comb again, with several foils at the 0.2 cm upper bound** |
 | 9 | As 8 with explicit passive material (0.014 X0 per layer, absorbs, converts and scatters like the foil) and the foil lower bound exactly 0 | summed TS | best of 10 restarts: 1938, 0, 1, 1992, 1, 1, 1936, 656 µm (TS 9787). The single notebook run: 1992, 0, 0, 1559, 985, 0, 0, 1996 µm (TS 9699) | **a clean comb: thick foils at or near the 0.2 cm upper bound in layers 0, 3 and 6 (and 7), bare layers between** |
+| 10 | As 9 with the Kalman-filter PSF model (energy loss of the pair, energy sharing integrated, mixture PSF with tails) | summed TS | best of 10 restarts: 376, 445, 550, 714, 1004, 1634, 2000, 2000 µm (TS 14011) | **back-loaded and smooth: foils increase with depth, no comb, one basin** |
 
 So we have seen back-loaded, front-loaded, super front-loaded and one-in-three comb optima. Row 8 shows that adding the energy axis alone did not remove the comb: it moved the thick foils to the placeholder upper bound. Row 9 shows that making the passive material explicit did not remove it either: the comb became cleaner, with the thick foils even closer to the upper bound and the bare layers truly bare. Row 4 shows that the
 sign of the slope is controlled by a single toy input, `downstreamScatteringWeight`, which has no source. LAT's
@@ -182,6 +185,42 @@ default-start run and 10 random restarts.
   is small, are a candidate artifact of the window scattering model (a foil in the next two layers adds full-weight scattering),
   to be rechecked with the Kalman model.
 
+## 4e. The Kalman PSF model (row 10)
+
+The window heuristic is replaced by the covariance of a backward Kalman filter over all the hits below the conversion vertex
+(scattering as process noise, radiative energy loss of the pair, the energy sharing of the pair integrated over 6 nodes,
+the plain average of the two tracks). It is checked against an independent generalised-least-squares calculation (1.1e-5
+relative) and the closed form without scattering (ratio 1.000000). The window model is kept with `setPsfModel("window")`
+and reproduces its old numbers exactly.
+
+- **How different the PSF is.** For the same foil patterns the Kalman width is much smaller than the heuristic and varies with
+  the layer's own material. At 126 MeV, uniform 500 µm foils give 2.6 degrees against 10.7. For the comb pattern the bare
+  layers give 0.8 degrees against 11, so the heuristic overweighted the scattering badly and created the comb.
+- **Scale:** TS 10,937 at the initial design (7272 with the window model), 14,005 in the single run and 14,011 at best over
+  10 restarts. PSF68 is 6.3 degrees and PSF95 18.6 degrees, so the PSF now has tails.
+- **The landscape collapsed to one design.** Four basins within 0.04% (14,005.8 to 14,010.8), all the same pattern. With the
+  window model there were seven basins over a 5% spread with different patterns.
+
+| Basin | TS | Found by | Foils [µm], layers 0 to 7 |
+|---|---|---|---|
+| A | 14010.8 | 5 of 10 | 376, 445, 550, 714, 1004, 1634, 2000, 2000 |
+| B | 14009.0 | 2 of 10 | 376, 446, 550, 714, 1005, 1634, 1998, 1998 |
+| C | 14008.0 | 2 of 10 | 376, 445, 550, 714, 1005, 1635, 1996, 1997 |
+| D | 14005.8 | 1 of 10 | 376, 445, 550, 714, 1005, 1635, 1998, 1998 |
+
+- **Back-loaded and smooth.** The foil goes from 0.11 X0 at the top to 0.57 X0 at the bottom, and the conversion probability per
+  layer is 0.09 to 0.15, nearly uniform. This is the logic of the LAT design (thin foils in front for the PSF, thick at the back
+  for the effective area), and it came out of the optimiser, not from an assumption. The last two layers are still at the 0.2 cm
+  placeholder bound, so the thick end is bound-limited.
+- **Other settings:** layer spacing at the height budget (30.0 cm), strip pitch 164 µm with 48,901 of 50,000 channels, ACD 2.87 cm,
+  total conversion 0.868.
+- **Consistency checks:** the no-label TS (12,518) still tracks the labelled one (14,005), with a 12% gap that is now a real
+  advantage of the labels. The single-cone TS (5,714) no longer follows it, because the cone's width is set by the widest
+  components of the mixture. The cone is a weak diagnostic now.
+- **Caveat:** the Kalman filter is an ideal fit (a Cramér-Rao-type bound). Hit inefficiency, pattern recognition and non-Gaussian
+  scattering are not in the model, so the PSF is optimistic. The shape of the optimum is more credible than its numbers.
+- **Run time:** the 8-bin Kalman model takes about 49 ms per gradient step, and the full notebook about 24 minutes.
+
 ## 5. What has been stable
 
 Only the quantities that are pinned by a bound or budget: the ACD thickness (at its 3 cm upper bound) and the strip
@@ -192,9 +231,10 @@ the exception: it is no longer set by the channel budget.
 
 ## 6. What would make the foil placement trustworthy
 
-1. The fit-covariance PSF model, to replace the hard window and the toy weight below the fitted hits.
-2. The energy axis, because thin-front, thick-back is an energy trade-off.
-3. A realistic regime: the source flux, the background, the exposure and the instrument size.
-4. Directions, which give the tracker's charged rejection a physical basis.
-5. A restart protocol: always report the spread over restarts and the basins, never a single run, and test whether
-   the conclusion survives each model change.
+1. ~~The fit-covariance PSF model~~ (done, section 4e). It removed the comb and the multimodality.
+2. Hit inefficiency as a mixture over missed-hit patterns (more PSF tails, and the confusion matrix), and pattern recognition.
+3. Raise or source the 0.2 cm foil bound and see whether the optimum keeps asking for more tungsten at the back.
+4. A realistic regime: the source flux, the background, the exposure and the instrument size.
+5. Directions, which give the tracker's charged rejection a physical basis.
+6. A restart protocol: always report the spread over restarts and the basins, never a single run, and test whether the conclusion
+   survives each model change.
