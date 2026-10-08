@@ -96,15 +96,21 @@ All numbers are placeholders. Do not trust an optimum until they are set to real
   two layers below (HERD: at least 3 hits per particle; LAT: the first 2 planes after the conversion must be
   measured). So the last `minimumDownstreamLayersForReconstruction = 2` layers cannot be a conversion layer,
   and there are `numberOfLayers - 2 = 8` classes. This is a fixed mask, not an empty class.
-- **Multiple scattering.** One Highland-Lynch-Dahl term with the log correction, applied once to the combined
-  scatterer (PDG: adding separate `theta0` in quadrature is systematically too small). The scatterer is: the rest
-  of its own foil, with the conversion depth averaged over the absorption profile `exp(-kappa t)` (exact, and
-  `x/2` only for thin foils); the silicon of its own layer; the next two layers (foil and silicon) at full
-  weight, because they carry the fitted hits; and everything below at the toy weight `1/3`. Still missing: the
-  average over the two tracks, the real energy sharing of the pair (equal sharing is assumed), and the hit-by-hit
-  correlation of a track fit. **Known artifact:** the hard window of two full-weight layers makes the optimiser
-  place a foil every third layer, with bare tracking planes in between. The fit-covariance model should remove
-  it.
+- **PSF model: a Kalman filter (the default), with the earlier window heuristic kept.** The direction of each pair member
+  comes from a backward Kalman filter over all the hits below the conversion vertex. The state is the position and the
+  slope at a plane, the hit error is `pitch/sqrt(12)`, and the multiple scattering of each layer is process noise on the
+  slope (Highland with the log term applied once to the whole track material, as PDG advises). The track loses energy by
+  radiation, `E(t) = E exp(-t)`, so the scattering grows along it. The covariance does not depend on the hit values, so it
+  is a deterministic recursion with no simulated events. It is checked against an independent generalised-least-squares
+  calculation (1e-5 relative) and the closed form without scattering. The energy sharing of the pair,
+  `1 - 4/3 x(1-x)` (PDG Eq. 34.31), is integrated over 6 nodes between a minimum track energy (placeholder 10 MeV) and
+  its complement, so the PSF of each layer is a mixture of Gaussians with natural tails, and the cut gives a signal
+  efficiency (0.81 in the lowest energy bin). The photon direction is the plain average of the two tracks, as in the HERD
+  reconstruction, plus the intrinsic opening angle. Still idealised: ideal hit efficiency, no pattern recognition,
+  Gaussian scattering, no vertex constraint. `setPsfModel("window")` restores the earlier heuristic (one combined
+  scatterer, the two layers with the fitted hits at full weight, a toy weight of 1/3 below), which reproduces its old
+  numbers exactly. That heuristic produced a comb-shaped optimum and many local optima that the Kalman model does not
+  (see [FINDINGS.md](FINDINGS.md)).
 
 ### Power-law source and energy bounds
 

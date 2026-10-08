@@ -59,6 +59,20 @@ signalSpectralIndex = 2.0              # Index 2 power law, as in the Fermi-LAT 
 diffuseSpectralIndex = 2.1             # Diffuse photon background, high-latitude index 2.1 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note e.
 chargedSpectralIndex = 2.7             # Charged cosmic-ray background. Placeholder, no source found (a steep power law).
 
+# PSF model. "kalman": the direction of each pair member comes from a backward Kalman filter over all the hits below the conversion vertex,
+# with multiple scattering as process noise, the mean radiative energy loss along the track, the energy sharing of the pair integrated over a
+# few nodes (a mixture of Gaussians, so the PSF has tails) and the two tracks averaged with equal weights, as in the HERD reconstruction.
+# "window": the earlier heuristic (one combined scatterer with full weight for the layers that carry the fitted hits and a toy weight below),
+# kept to compare with.
+psfModel = "kalman"                    # "kalman" or "window". Use setPsfModel to change it.
+minimumTrackEnergy = 10.0              # MeV. Placeholder, no source: a track below this energy is not reconstructed (it ranges out or scatters wildly). It cuts the energy sharing of the pair.
+numberOfEnergySharingNodes = 6         # Quadrature nodes over the energy sharing of the pair. Numerical choice.
+pairEnergySharingCoefficient = 4.0 / 3.0   # Energy sharing of the pair, dsigma/dx ~ 1 - 4/3 x (1 - x), complete screening, PDG Eq. 34.31 [pdg2024passage] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-passage-particles-matter.pdf. Its integral over 0 to 1 is 7/9, the conversion coefficient.
+highlandConstant = 13.6                # MeV. Highland-Lynch-Dahl, PDG Eq. 34.16 [pdg2024passage] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-passage-particles-matter.pdf
+highlandLogCoefficient = 0.038         # PDG Eq. 34.16 [pdg2024passage] https://pdg.lbl.gov/2024/reviews/rpp2024-rev-passage-particles-matter.pdf
+trackFilterPriorPositionVariance = 100.0   # cm^2. Uninformative prior of the Kalman filter, far above any hit error. Numerical choice, no physical source.
+trackFilterPriorSlopeVariance = 10.0       # rad^2. Uninformative prior of the Kalman filter, far above any direction error. Numerical choice, no physical source.
+
 # Bounds of the energy range, checked against the design by computeBoundWarnings (not part of the loss).
 comptonPairCrossoverEnergy = 10.0      # MeV. Placeholder, from memory: Compton and pair production cross sections are equal at about 10 MeV in tungsten. To check against NIST XCOM.
 criticalEnergyTungsten = 7.97          # MeV. Physical constant: critical energy of tungsten for e- [pdg2024tungsten] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/tungsten_W.html
@@ -169,15 +183,38 @@ def computeEnergyGrid(sourceTypeName):
     )
 
 
+def computeEnergySharing(binEnergies):
+    """Energy sharing of the pair for each energy: quadrature nodes (the fraction of the photon energy in one track), normalised weights,
+    and the efficiency of the minimum track energy cut, relative to all the pairs."""
+    if psfModel == "window":
+        return np.full((len(binEnergies), 1), 0.5), np.ones((len(binEnergies), 1)), np.ones(len(binEnergies))   # One equal-sharing pair, no cut.
+    unitNodes, unitWeights = np.polynomial.legendre.leggauss(numberOfEnergySharingNodes)   # On [-1, 1].
+    fractionMinimum = minimumTrackEnergy / np.asarray(binEnergies)[:, None]
+    nodes = fractionMinimum + (1.0 - 2.0 * fractionMinimum) * (unitNodes[None, :] + 1.0) / 2.0   # Between the cuts, 2: the cut at both ends.
+    densityWeights = unitWeights[None, :] * (1.0 - 2.0 * fractionMinimum) / 2.0 * (1.0 - pairEnergySharingCoefficient * nodes * (1.0 - nodes))
+    efficiency = densityWeights.sum(axis=1) / (1.0 - pairEnergySharingCoefficient / 6.0)   # 6: integral of x (1 - x) over 0 to 1 is 1/6, so the total is 7/9.
+    return nodes, densityWeights / densityWeights.sum(axis=1, keepdims=True), efficiency
+
+
+def setPsfModel(psfModelName):
+    """Choose "kalman" or "window". Call before the first call of a jitted function."""
+    global psfModel
+    psfModel = psfModelName
+    setSourceType(sourceType)
+
+
 def setSourceType(sourceTypeName):
     """Choose "powerLaw" or "monochromatic". Call before the first call of a jitted function: they read these arrays when traced."""
     global sourceType, binPsfEnergy, binSignalFraction, binDiffuseFraction, binChargedFraction
+    global binSharingNodes, binSharingWeight, binSharingEfficiency
     sourceType = sourceTypeName
     energyGrid = computeEnergyGrid(sourceTypeName)
     binPsfEnergy = jnp.asarray(energyGrid["psfEnergy"])
     binSignalFraction = jnp.asarray(energyGrid["signalFraction"])
     binDiffuseFraction = jnp.asarray(energyGrid["diffuseFraction"])
     binChargedFraction = jnp.asarray(energyGrid["chargedFraction"])
+    sharingNodes, sharingWeights, sharingEfficiency = computeEnergySharing(energyGrid["psfEnergy"])
+    binSharingNodes, binSharingWeight, binSharingEfficiency = jnp.asarray(sharingNodes), jnp.asarray(sharingWeights), jnp.asarray(sharingEfficiency)
 
 
 setSourceType(sourceType)
@@ -260,6 +297,70 @@ def computePerLayerAngularVarianceInEnergyBins(converterRadiationLengths, layerS
     )(binPsfEnergy)
 
 
+def computeTrackSlopeVarianceAtVertex(trackEnergy, layerRadiationLengths, layerSpacing, stripPitch):
+    """Variance (rad^2, one projection) of the direction at the conversion vertex of a track of the given energy, for every conversion layer.
+
+    A backward Kalman filter over the hits below the vertex. The state is the position and the slope at a plane, the hit error is
+    pitch / sqrt(12), and the multiple scattering of the material of each layer (at its plane) is the process noise on the slope. The
+    track loses energy by radiation, E(t) = E exp(-t) in radiation lengths, so the scattering grows along it. As in the PDG advice, the
+    Highland log term is applied once to the whole material of the track. The covariance does not depend on the hit values, so it is
+    computed by a deterministic recursion (no simulated events). Hit efficiency is ideal, pattern recognition is not modelled.
+    """
+    numberOfPlanes = layerRadiationLengths.shape[0]
+    ownPath = computeExpectedLayerPathAfterConversion(layerRadiationLengths)   # Rest of its own layer after the conversion.
+    hitVariance = stripPitch**2 / 12.0   # 12: variance of a uniform distribution over one pitch.
+    layerIndex = jnp.arange(numberOfPlanes)
+    propagator = jnp.array([[1.0, -layerSpacing], [0.0, 1.0]])   # One plane upstream, for the backward filter.
+    noiseShape = jnp.array([[layerSpacing**2, -layerSpacing], [-layerSpacing, 1.0]])   # A kick of the slope at a plane, seen from the next plane upstream.
+    prior = jnp.diag(jnp.array([trackFilterPriorPositionVariance, trackFilterPriorSlopeVariance]))
+
+    def varianceForConversionLayer(conversionLayer):
+        isBelow = layerIndex > conversionLayer
+        materialBelow = jnp.where(isBelow, layerRadiationLengths, 0.0)
+        traversedBefore = ownPath[conversionLayer] + jnp.cumsum(materialBelow) - materialBelow   # Radiation lengths crossed before entering each layer.
+        energyIn = trackEnergy * jnp.exp(-traversedBefore)
+        logFactor = (1.0 + highlandLogCoefficient * jnp.log(ownPath[conversionLayer] + materialBelow.sum())) ** 2
+        # Kick variance of a layer: Highland with the energy falling along the layer, the integral of dt / E(t)^2 = (exp(2 x) - 1) / (2 E_in^2).
+        kickVariance = jnp.where(isBelow, highlandConstant**2 * jnp.expm1(2.0 * layerRadiationLengths) / 2.0 / energyIn**2 * logFactor, 0.0)   # 2.0: from the integral.
+        ownKickVariance = highlandConstant**2 * jnp.expm1(2.0 * ownPath[conversionLayer]) / 2.0 / trackEnergy**2 * logFactor
+        planeDescending = jnp.arange(numberOfPlanes - 1, -1, -1)
+        kickBelowPlane = jnp.where(planeDescending < numberOfPlanes - 1, kickVariance[jnp.minimum(planeDescending + 1, numberOfPlanes - 1)], 0.0)
+
+        def filterOnePlane(covariance, planeAndKick):
+            plane, kick = planeAndKick
+            predicted = jnp.where(plane == numberOfPlanes - 1, prior, propagator @ covariance @ propagator.T + kick * noiseShape)
+            gain = predicted[:, 0] / (predicted[0, 0] + hitVariance)
+            updated = predicted - jnp.outer(gain, predicted[0, :])
+            return updated, updated[1, 1]
+
+        _, slopeVarianceDescending = jax.lax.scan(filterOnePlane, jnp.zeros((2, 2)), (planeDescending, kickBelowPlane))
+        # The filtered slope at the conversion plane is the one after the scattering of its own layer. The direction at the vertex adds that kick.
+        return slopeVarianceDescending[numberOfPlanes - 1 - conversionLayer] + ownKickVariance
+
+    return jax.vmap(varianceForConversionLayer)(layerIndex)
+
+
+def computePsfComponentVariance(converterRadiationLengths, layerSpacing, stripPitch):
+    """Variance (rad^2, per axis) of the reconstructed direction of each PSF component: one array with energy bins, layers and energy-sharing nodes."""
+    if psfModel == "window":
+        return computePerLayerAngularVarianceInEnergyBins(converterRadiationLengths, layerSpacing, stripPitch)[:, :, None]
+    layerRadiationLengths = converterRadiationLengths + passiveRadiationLengthsPerLayer
+    binEnergy = binPsfEnergy[:, None]
+    trackEnergies = jnp.stack([binSharingNodes * binEnergy, (1.0 - binSharingNodes) * binEnergy], axis=-1)   # Bins, nodes, the two tracks.
+    trackVariance = jax.vmap(jax.vmap(jax.vmap(
+        lambda energy: computeTrackSlopeVarianceAtVertex(energy, layerRadiationLengths, layerSpacing, stripPitch)
+    )))(trackEnergies)   # Bins, nodes, tracks, layers.
+    # The photon direction is the plain average of the two track directions (as in the HERD reconstruction): variance (V_a + V_b) / 4.
+    # The intrinsic opening angle of the pair is added as before.
+    pairVariance = (trackVariance[:, :, 0, :] + trackVariance[:, :, 1, :]) / 4.0 + ((electronMass / binPsfEnergy) ** 2)[:, None, None]   # 4.0: average of two tracks.
+    return jnp.transpose(pairVariance, (0, 2, 1))   # Bins, layers, nodes.
+
+
+def computeEffectiveVarianceInEnergyBins(converterRadiationLengths, layerSpacing, stripPitch):
+    """Mean angular variance (rad^2) over the PSF components, one row per energy bin and one column per layer. For reporting."""
+    return jnp.sum(computePsfComponentVariance(converterRadiationLengths, layerSpacing, stripPitch) * binSharingWeight[:, None, :], axis=2)
+
+
 def computeEffectiveAngularVariance(converterRadiationLengths, conversionProbabilityPerLayer, layerSpacing, stripPitch):
     """Variance averaged over conversion layers. Only the single-cone check uses this, the objective keeps each layer."""
     angularVariancePerLayer = computePerLayerAngularVariance(converterRadiationLengths, layerSpacing, stripPitch)
@@ -320,11 +421,12 @@ def computeCountsPerLayer(
     # Share of the charged background in each class: follows the material of the layer (foil and passive material), not attenuated from above.
     materialPerLayer = (converterRadiationLengths + passiveRadiationLengthsPerLayer)[:numberOfReconstructableLayers]
     chargedBackgroundLayerShare = materialPerLayer / jnp.sum(materialPerLayer)
-    signalCount = (
-        signalPhotonFlux * binSignalFraction[:, None] * exposureFactor * probabilityPerLayer[None, :] * photonSurvivalProbabilityThroughAcd
+    signalCount = (   # The efficiency of the energy-sharing cut applies to the photons, not to the charged background.
+        signalPhotonFlux * binSignalFraction[:, None] * binSharingEfficiency[:, None] * exposureFactor * probabilityPerLayer[None, :]
+        * photonSurvivalProbabilityThroughAcd
     )
     backgroundCount = exposureFactor * (
-        diffusePhotonFlux * binDiffuseFraction[:, None] * probabilityPerLayer[None, :] * photonSurvivalProbabilityThroughAcd
+        diffusePhotonFlux * binDiffuseFraction[:, None] * binSharingEfficiency[:, None] * probabilityPerLayer[None, :] * photonSurvivalProbabilityThroughAcd
         + chargedParticleFlux * binChargedFraction[:, None] * (1.0 - vetoEfficiency) * chargedBackgroundLayerShare[None, :]
     )
     return signalCount, backgroundCount
@@ -339,46 +441,63 @@ def computeAsimovIntegrand(signalDensity, backgroundDensity):
     return 2.0 * backgroundDensity * jnp.where(ratio < 1e-3, smallRatioSeries, directFormula)   # 2.0: Asimov likelihood ratio definition. 1e-3: switch to the series, numerical choice.
 
 
-def computeSpatialSignificanceSquared(signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, confusionMatrix):
-    """Expected likelihood ratio (TS) of a point source against background alone, summed over assigned-layer classes."""
+def computeSpatialSignificanceSquaredComponents(
+    signalCountPerComponent, angularVariancePerComponent, backgroundCountPerLayer, signalConfusionMatrix, backgroundConfusionMatrix
+):
+    """Expected likelihood ratio (TS) of a point source against background alone, summed over assigned-layer classes.
+
+    The signal of a true layer is a mixture of Gaussian PSF components (one per energy-sharing node), so the matrices differ in size:
+    the signal confusion matrix maps components to assigned classes, the background one maps layers to assigned classes.
+    """
     radius = jnp.geomspace(radialGridMinimum, fieldOfViewRadius, radialGridPoints)   # rad
-    # One 2D Gaussian PSF (1/sr) per true conversion layer.
-    psfPerTrueLayer = jnp.exp(-radius[None, :] ** 2 / (2.0 * angularVariancePerLayer[:, None])) / (
-        2.0 * jnp.pi * angularVariancePerLayer[:, None]
+    # One 2D Gaussian PSF (1/sr) per component.
+    psfPerComponent = jnp.exp(-radius[None, :] ** 2 / (2.0 * angularVariancePerComponent[:, None])) / (
+        2.0 * jnp.pi * angularVariancePerComponent[:, None]
     )
     # An assigned class sees each true layer with the probability in the confusion matrix.
-    signalDensityPerClass = confusionMatrix @ (signalCountPerLayer[:, None] * psfPerTrueLayer)   # 1/sr
-    backgroundDensityPerClass = (confusionMatrix @ backgroundCountPerLayer) / fieldOfViewSolidAngle   # 1/sr, flat
+    signalDensityPerClass = signalConfusionMatrix @ (signalCountPerComponent[:, None] * psfPerComponent)   # 1/sr
+    backgroundDensityPerClass = (backgroundConfusionMatrix @ backgroundCountPerLayer) / fieldOfViewSolidAngle   # 1/sr, flat
     integrand = computeAsimovIntegrand(signalDensityPerClass, backgroundDensityPerClass[:, None])
     # Integral of the integrand over the circular cap, with the exact area element 2 pi sin(theta) dtheta, as a trapezoid in ln theta (dtheta = theta d ln theta).
     integralPerClass = jnp.trapezoid(integrand * 2.0 * jnp.pi * jnp.sin(radius[None, :]) * radius[None, :], jnp.log(radius), axis=1)
     return jnp.sum(integralPerClass)
 
 
-def computeSpatialTestStatistic(signalCountPerBinAndLayer, backgroundCountPerBinAndLayer, angularVariancePerBinAndLayer, confusionMatrix):
+def computeSpatialSignificanceSquared(signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, confusionMatrix):
+    """The same with one Gaussian PSF per true layer (no energy-sharing components). Kept for the checks."""
+    return computeSpatialSignificanceSquaredComponents(
+        signalCountPerLayer, angularVariancePerLayer, backgroundCountPerLayer, confusionMatrix, confusionMatrix
+    )
+
+
+def computeSpatialTestStatistic(signalCountPerBinAndLayer, backgroundCountPerBinAndLayer, angularVariancePerBinLayerNode, nodeWeights, confusionMatrix):
     """Expected test statistic of the power-law source: the sum over the energy bins of the per-bin spatial TS (no energy migration).
 
     With the best-fit power law equal to the true one in the Asimov dataset, this is the TS of the fit of the signal power law
-    against the background-only fit, as in Fermi-LAT.
+    against the background-only fit, as in Fermi-LAT. The PSF of a layer is a mixture over the energy-sharing nodes.
     """
-    return jnp.sum(jax.vmap(computeSpatialSignificanceSquared, in_axes=(0, 0, 0, None))(
-        signalCountPerBinAndLayer, backgroundCountPerBinAndLayer, angularVariancePerBinAndLayer, confusionMatrix
+    numberOfBins, numberOfClasses, numberOfNodes = angularVariancePerBinLayerNode.shape
+    signalPerComponent = (signalCountPerBinAndLayer[:, :, None] * nodeWeights[:, None, :]).reshape(numberOfBins, -1)   # Layer-major, then node.
+    variancePerComponent = angularVariancePerBinLayerNode.reshape(numberOfBins, -1)
+    signalConfusionMatrix = jnp.repeat(confusionMatrix, numberOfNodes, axis=1)   # The same layer assignment for every node.
+    return jnp.sum(jax.vmap(computeSpatialSignificanceSquaredComponents, in_axes=(0, 0, 0, None, None))(
+        signalPerComponent, variancePerComponent, backgroundCountPerBinAndLayer, signalConfusionMatrix, confusionMatrix
     ))
 
 
-def computeConeCheck(conversionProbabilityPerLayer, angularVariancePerBinAndLayer, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction):
+def computeConeCheck(conversionProbabilityPerLayer, angularVariancePerBinLayerNode, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction):
     """Single-cone check, one averaged Gaussian and a cone of fixed radius in each energy bin. Returns the TS summed over the bins and the counts in the cones."""
     exposureFactor = detectorSideLength**2 * exposureDuration * livetimeFraction
     probabilityPerLayer = conversionProbabilityPerLayer[:numberOfReconstructableLayers]
     totalConversionProbability = jnp.sum(probabilityPerLayer)
-    effectiveVariancePerBin = jnp.sum(probabilityPerLayer[None, :] * angularVariancePerBinAndLayer, axis=1) / totalConversionProbability
+    effectiveVariancePerBin = jnp.sum(probabilityPerLayer[None, :, None] * binSharingWeight[:, None, :] * angularVariancePerBinLayerNode, axis=(1, 2)) / totalConversionProbability
     signalContainmentFraction, backgroundFractionInsideCone = computeSignalConeFractions(effectiveVariancePerBin)
     signalCountPerBin = (
-        signalPhotonFlux * binSignalFraction * exposureFactor * totalConversionProbability
+        signalPhotonFlux * binSignalFraction * binSharingEfficiency * exposureFactor * totalConversionProbability
         * photonSurvivalProbabilityThroughAcd * signalContainmentFraction
     )
     backgroundCountPerBin = exposureFactor * backgroundFractionInsideCone * (
-        diffusePhotonFlux * binDiffuseFraction * totalConversionProbability * photonSurvivalProbabilityThroughAcd
+        diffusePhotonFlux * binDiffuseFraction * binSharingEfficiency * totalConversionProbability * photonSurvivalProbabilityThroughAcd
         + chargedParticleFlux * binChargedFraction * (1.0 - vetoEfficiency)
     )
     coneTestStatistic = jnp.sum(computeAsimovSignificance(signalCountPerBin, backgroundCountPerBin) ** 2)
@@ -423,26 +542,27 @@ def computeDetectorResponse(unboundedParameters):
     vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction = computeAcdResponse(acdThickness, acdThreshold)
 
     # Objective: each conversion layer is a pseudo-detector with its own PSF, and the spatial likelihood ratios add.
-    angularVariancePerLayer = computePerLayerAngularVarianceInEnergyBins(
+    angularVariancePerLayer = computePsfComponentVariance(
         converterRadiationLengths, layerSpacing, stripPitch
-    )[:, :numberOfReconstructableLayers]   # One row per energy bin.
+    )[:, :numberOfReconstructableLayers, :]   # Energy bins, layers, energy-sharing nodes.
     signalCountPerLayer, backgroundCountPerLayer = computeCountsPerLayer(
         conversionProbabilityPerLayer, converterRadiationLengths, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction
     )
     significanceSquared = computeSpatialTestStatistic(
-        signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, labelConfusionMatrix
+        signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, binSharingWeight, labelConfusionMatrix
     )
     significanceSquaredNoLabel = computeSpatialTestStatistic(
-        signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, noLabelConfusionMatrix
+        signalCountPerLayer, backgroundCountPerLayer, angularVariancePerLayer, binSharingWeight, noLabelConfusionMatrix
     )
-    psf68, psf95 = computeContainmentRadii(signalCountPerLayer, angularVariancePerLayer)
+    signalCountPerComponent = signalCountPerLayer[:, :, None] * binSharingWeight[:, None, :]
+    psf68, psf95 = computeContainmentRadii(signalCountPerComponent, angularVariancePerLayer)
 
     # Single-cone check: one averaged Gaussian and a cone of fixed radius. Not used by the loss.
     coneTestStatistic, signalCount, backgroundCount = computeConeCheck(
         conversionProbabilityPerLayer, angularVariancePerLayer, vetoEfficiency, photonSurvivalProbabilityThroughAcd, livetimeFraction
     )
     # Signal-weighted mean variance over the energy bins and layers, for the single number "angular resolution".
-    effectiveAngularVariance = jnp.sum(signalCountPerLayer * angularVariancePerLayer) / jnp.sum(signalCountPerLayer)
+    effectiveAngularVariance = jnp.sum(signalCountPerComponent * angularVariancePerLayer) / jnp.sum(signalCountPerComponent)
 
     constraintPenalty, numberOfChannels = computeConstraintPenalty(stripPitch, layerSpacing)
     totalSignalPhotons = jnp.sum(signalCountPerLayer)

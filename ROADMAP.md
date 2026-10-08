@@ -62,9 +62,14 @@ The output can be piped to a file by the caller, so the script writes nothing it
 - [x] Multiple scattering: expected conversion depth in the foil, own-layer silicon, full weight on the layers that
       carry the fitted hits, log correction, applied once to the combined scatterer.
 - [x] Objective: the test statistic TS (Fermi-LAT), with the old significance loss kept.
-- [ ] Replace the resolution formulas with a Fisher or Kalman covariance. This also removes the toy weight below
-      the fitted hits, the comb-shaped optimum (a foil every third layer), and adds the average over the two
-      tracks, the real energy sharing of the pair and the hit correlations.
+- [x] Kalman-filter PSF model: backward filter over the hits, radiative energy loss of the pair, energy sharing integrated
+      over nodes (mixture PSF with tails), equal-weight average of the two tracks. The window heuristic is kept with
+      `setPsfModel("window")`.
+- [ ] Hit inefficiency as a mixture over missed-hit patterns: more PSF tails, and the off-diagonal terms of the confusion matrix.
+- [ ] Pattern-recognition efficiency.
+- [ ] A Monte Carlo of the full fit with simulated events, to check the Gaussian approximation and the tails.
+- [ ] Replace the single-cone check, which is a weak diagnostic with a mixture PSF.
+- [ ] Report: show "n/a" for the PSF width of layers that cannot be a conversion layer (the filter has no lever arm there).
 - [ ] Add a PSF with non-Gaussian tails (for example a King function).
 - [ ] Free background normalisation in the likelihood ratio (profile likelihood).
 - [ ] Add the missing trade-offs that stop parameters running to their bounds (backsplash, mass, cost).

@@ -67,6 +67,17 @@ them are in [references/](references):
 
 With the power law the three fluxes are integral fluxes above `energyMinimum`.
 
+## PSF model (Kalman filter)
+
+| Input | Stands for | Current | Reference | Note |
+|---|---|---|---|---|
+| `psfModel` | PSF model | `"kalman"` | | `"window"` is the earlier heuristic, kept to compare with. |
+| `minimumTrackEnergy` | Lowest track energy that is reconstructed | 10 MeV | No source | Placeholder. It cuts the energy sharing of the pair and gives a signal efficiency (0.81 at 100 MeV). |
+| `numberOfEnergySharingNodes` | Quadrature nodes over the energy sharing | 6 | | Numerical choice. |
+| `pairEnergySharingCoefficient` | Energy sharing of the pair, `1 - 4/3 x (1-x)` | 4/3 | PDG Eq. 34.31 [pdg2024passage] | Complete screening, high energy. Its integral over 0 to 1 is 7/9. |
+| `highlandConstant`, `highlandLogCoefficient` | Multiple scattering | 13.6 MeV, 0.038 | PDG Eq. 34.16 [pdg2024passage] | |
+| `trackFilterPriorPositionVariance`, `trackFilterPriorSlopeVariance` | Uninformative prior of the filter | 100 cm^2, 10 rad^2 | | Numerical choice, far above any real error. |
+
 ## Things the model lacks that real parameters would feed
 
 - **Hit efficiency and the confusion matrix.** LAT quotes above 99% per plane, and says that missing one of the
