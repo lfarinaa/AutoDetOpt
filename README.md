@@ -73,12 +73,13 @@ All numbers are placeholders. Do not trust an optimum until they are set to real
   layer `l'` to a photon that truly converted in layer `l`. v0 uses the identity (perfect labels), which is
   the trivial case and an upper bound. Rows that are all identical give no labels, which collapses to a
   single mixture PSF and is a lower bound. A realistic matrix will come from the track-reconstruction model.
-- **Layers without foils are allowed, but never empty.** A layer with no foil still converts some photons in
-  its passive material (silicon, supports, electronics). So the lower bound of `converterThickness` is a very
-  small positive number, not zero. Placeholder `1e-3 cm` of tungsten, about `3e-3` radiation lengths,
-  comparable to one silicon plane. Then `p_l > 0` for every layer, no class is empty and there is no `0/0` in
-  the integral. A design with bare layers at the front can then preserve the PSF of photons that convert
-  deeper. The bound should later come from a passive-material budget.
+- **Passive material is explicit.** Each layer has `passiveRadiationLengthsPerLayer = 0.014` X0 of material that is
+  not the foil (silicon detectors, supports and electronics; the LAT tracker has 0.014 X0 per x-y plane, Table 2). The
+  photon is absorbed by it and can convert in it, and the pair scatters in it: a layer is treated as one slab of foil
+  plus passive material. A layer with no foil is therefore never empty, and the lower bound of the foil thickness is
+  exactly 0. This replaces the earlier floor of `1e-3 cm` of tungsten, which stood in for the passive conversion. LAT
+  reports PSF tails from conversions in support material. Here those photons share the Gaussian PSF of their layer, so the
+  tails are not modelled yet.
 - **Background per class.** The diffuse photon background follows the conversion probabilities. The
   charged-particle background that gets through the ACD is final: nothing rejects it afterwards (decided). It is
   a minimum-ionising particle crossing the whole instrument, so the foils neither attenuate it nor change its

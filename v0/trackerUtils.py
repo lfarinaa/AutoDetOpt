@@ -29,7 +29,6 @@ jax.config.update("jax_enable_x64", True)
 
 # Radiation lengths of the materials.
 radiationLengthTungsten = 0.3504       # cm. Physical constant: tungsten radiation length [pdg2024tungsten] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/tungsten_W.html
-radiationLengthSilicon = 9.37          # cm. Physical constant: silicon radiation length [pdg2024silicon] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/silicon_Si.html
 radiationLengthScintillator = 42.4     # cm. Physical constant: polyvinyltoluene scintillator is 42.54 cm [pdg2024pvt] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/polyvinyltoluene.html. 42.4 is slightly off, to update.
 
 # Pair conversion probability after x radiation lengths is 1 - exp(-7/9 * x), the high energy limit.
@@ -39,7 +38,7 @@ numberOfLayers = 10                    # Discrete, so it is scanned by hand rath
 photonEnergy = 100.0                   # MeV. Only used by the monochromatic source (sourceType = "monochromatic"). Placeholder. The power-law source has an energy axis instead.
 electronMass = 0.511                   # MeV. Physical constant: electron mass, PDG https://pdg.lbl.gov/2024/
 detectorSideLength = 40.0              # cm. Placeholder. Reference: LAT is 1.8 m wide [atwood2009lat] https://arxiv.org/abs/0902.1089 Fig. 1. Decision pending (PARAMETERS.md).
-siliconThickness = 0.03                # cm, thickness of one silicon plane. Placeholder. Reference: LAT strip detectors are 400 µm = 0.04 cm [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.1.
+passiveRadiationLengthsPerLayer = 0.014   # X0 per x-y layer. The material of a layer that is not the foil (silicon detectors, supports, electronics). It absorbs, converts and scatters like the foil. Value of the LAT tracker, 0.014 X0 per x-y plane [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2. A different technology would differ, decision pending.
 
 # Fluxes and observation conditions.
 signalPhotonFlux = 1e-3                # 1/(cm^2 s), integral flux above energyMinimum for the power law. Placeholder, very bright. Reference: 1e-7 above 100 MeV for a faint high-latitude source [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d.
@@ -110,8 +109,8 @@ accidentalVetoScale = 0.1              # MeV. Sets how fast noise-induced dead t
 
 # Allowed range of each free parameter. Optimisation runs in an unbounded space (see below).
 parameterBounds = {
-    # cm, one value per layer. Never zero: passive material always converts some photons. Lower bound 1e-3 is a placeholder, optimistic: LAT passive material is 0.014 X0 per x-y plane, about 0.005 cm of tungsten [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2. Upper bound 0.2 is a placeholder (LAT back foils are 0.072 cm, Table 2).
-    "converterThickness": (1e-3, 0.2),
+    # cm, one value per layer. Lower bound 0: a bare layer, whose absorption, conversion and scattering come from the explicit passive material. Upper bound 0.2 is a placeholder (LAT back foils are 0.072 cm [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2).
+    "converterThickness": (0.0, 0.2),
     # cm. Placeholder range. Reference: LAT about 3.2 cm, from pitch 0.0228 cm / 0.0071 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2.
     "layerSpacing": (0.5, 5.0),
     # cm. Placeholder range. Reference: LAT 228 µm = 0.0228 cm [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2; HERD FIT about 250 µm [farina2021herd] https://doi.org/10.22323/1.395.0651 section 2.
@@ -188,7 +187,7 @@ def computeLayerMaterial(converterThickness):
     """Material in each layer, and above and below it, in radiation lengths."""
     # Material in one layer: tungsten converter plus one silicon plane.
     converterRadiationLengths = converterThickness / radiationLengthTungsten
-    radiationLengthsPerLayer = converterRadiationLengths + siliconThickness / radiationLengthSilicon
+    radiationLengthsPerLayer = converterRadiationLengths + passiveRadiationLengthsPerLayer   # Foil and passive material of the layer.
 
     # Material the photon crosses before reaching a layer, and material the pair crosses after leaving it.
     radiationLengthsAboveLayer = jnp.cumsum(radiationLengthsPerLayer) - radiationLengthsPerLayer
@@ -200,38 +199,37 @@ def computeConversionProbabilityPerLayer(converterRadiationLengths, radiationLen
     """Probability that the photon converts in each layer and leaves a reconstructable track."""
     hasEnoughDownstreamLayers = (numberOfLayersBelow >= minimumDownstreamLayersForReconstruction).astype(float)
 
-    # Photon survives the layers above, then converts in this layer's tungsten. Silicon is ignored as a converter.
+    # Photon survives the material above (foils and passive material), then converts in the foil or the passive material of this layer.
     return (
         jnp.exp(-pairConversionCoefficientPerRadiationLength * radiationLengthsAboveLayer)
-        * (1.0 - jnp.exp(-pairConversionCoefficientPerRadiationLength * converterRadiationLengths))
+        * (1.0 - jnp.exp(-pairConversionCoefficientPerRadiationLength * (converterRadiationLengths + passiveRadiationLengthsPerLayer)))
         * hasEnoughDownstreamLayers
     )
 
 
-def computeExpectedFoilPathAfterConversion(converterRadiationLengths):
-    """Radiation lengths of its own foil that the pair crosses, averaged over where the photon converts in the foil.
+def computeExpectedLayerPathAfterConversion(layerRadiationLengths):
+    """Radiation lengths of its own layer (foil and passive material) that the pair crosses, averaged over where the photon converts.
 
-    The photon is absorbed as it goes, so the conversion depth t in the foil has density proportional to exp(-kappa t).
-    With u = kappa x the mean depth is x g(u), where g(u) = (1 - (1 + u) exp(-u)) / (u (1 - exp(-u))), and g -> 1/2 for a thin foil.
+    The photon is absorbed as it goes, so the conversion depth t in the layer has density proportional to exp(-kappa t).
+    With u = kappa x the mean depth is x g(u), where g(u) = (1 - (1 + u) exp(-u)) / (u (1 - exp(-u))), and g -> 1/2 for a thin layer.
+    The passive material is always there, so x is never 0 and g is never 0/0.
     """
     kappa = pairConversionCoefficientPerRadiationLength
-    u = kappa * converterRadiationLengths
+    u = kappa * layerRadiationLengths
     meanDepthFraction = (-jnp.expm1(-u) - u * jnp.exp(-u)) / (u * -jnp.expm1(-u))
-    return converterRadiationLengths * (1.0 - meanDepthFraction)
+    return layerRadiationLengths * (1.0 - meanDepthFraction)
 
 
 def computeScatteringRadiationLengths(converterRadiationLengths):
     """Radiation lengths that scatter the measured direction of a pair that converted in each layer, as one combined scatterer."""
-    siliconRadiationLengths = siliconThickness / radiationLengthSilicon   # Silicon of one layer, in radiation lengths.
-    radiationLengthsPerLayer = converterRadiationLengths + siliconRadiationLengths
+    radiationLengthsPerLayer = converterRadiationLengths + passiveRadiationLengthsPerLayer   # Foil and passive material of each layer.
     cumulative = jnp.concatenate([jnp.zeros(1), jnp.cumsum(radiationLengthsPerLayer)])   # cumulative[k] is the material of layers 0 to k-1.
     layerIndex = jnp.arange(numberOfLayers)
     endOfFittedLayers = jnp.minimum(layerIndex + 1 + fullWeightLayersBelow, numberOfLayers)   # 1: first layer below the conversion layer.
     materialInFittedLayers = cumulative[endOfFittedLayers] - cumulative[layerIndex + 1]   # Full weight: these layers carry the fitted hits.
     materialBeyondFittedLayers = cumulative[numberOfLayers] - cumulative[endOfFittedLayers]
     return (
-        computeExpectedFoilPathAfterConversion(converterRadiationLengths)   # The rest of its own foil.
-        + siliconRadiationLengths                                           # Silicon of its own layer, which carries the first hit.
+        computeExpectedLayerPathAfterConversion(radiationLengthsPerLayer)   # The rest of its own layer, which carries the first hit.
         + materialInFittedLayers
         + downstreamScatteringWeight * materialBeyondFittedLayers
     )
@@ -319,8 +317,8 @@ def computeCountsPerLayer(
     """Expected signal and background counts over the field of view: one row per energy bin and one column per true conversion layer."""
     exposureFactor = detectorSideLength**2 * exposureDuration * livetimeFraction
     probabilityPerLayer = conversionProbabilityPerLayer[:numberOfReconstructableLayers]
-    # Share of the charged background in each class: follows the material of the layer (foil and silicon), not attenuated from above.
-    materialPerLayer = (converterRadiationLengths + siliconThickness / radiationLengthSilicon)[:numberOfReconstructableLayers]
+    # Share of the charged background in each class: follows the material of the layer (foil and passive material), not attenuated from above.
+    materialPerLayer = (converterRadiationLengths + passiveRadiationLengthsPerLayer)[:numberOfReconstructableLayers]
     chargedBackgroundLayerShare = materialPerLayer / jnp.sum(materialPerLayer)
     signalCount = (
         signalPhotonFlux * binSignalFraction[:, None] * exposureFactor * probabilityPerLayer[None, :] * photonSurvivalProbabilityThroughAcd
@@ -509,7 +507,7 @@ def computeBoundWarnings(unboundedParameters):
     converterRadiationLengths = computeLayerMaterial(physicalParameters["converterThickness"])[0]
     if energyMinimum < comptonPairCrossoverEnergy:
         warningMessages.append(f"energyMinimum = {energyMinimum:.0f} MeV is below the Compton and pair crossover ({comptonPairCrossoverEnergy:.0f} MeV): the pair model does not describe the events.")
-    trackerRadiationLengths = float(jnp.sum(converterRadiationLengths + siliconThickness / radiationLengthSilicon))
+    trackerRadiationLengths = float(jnp.sum(converterRadiationLengths + passiveRadiationLengthsPerLayer))
     showerMaximumDepth = float(np.log(energyMaximum / criticalEnergyTungsten) + showerMaximumPhotonOffset)
     if trackerRadiationLengths > showerMaximumDepth:
         warningMessages.append(f"the tracker is too large for energyMaximum = {energyMaximum:.0f} MeV: it has {trackerRadiationLengths:.2f} radiation lengths against a shower maximum at {showerMaximumDepth:.2f}. The highest-energy photons shower inside it and the two-track pair model fails.")

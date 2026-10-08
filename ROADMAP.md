@@ -28,9 +28,11 @@ The output can be piped to a file by the caller, so the script writes nothing it
       per-class spatial integrals.
 - [x] Add a confusion matrix `C[l', l]` for conversion-layer assignment. Default to the identity.
 - [x] Add the no-label case (a mixture PSF) as a lower bound, and check that identity gives an upper bound.
-- [x] Set the lower bound of `converterThickness` to a small positive value (placeholder `1e-3 cm`), because
-      passive material always converts some photons. No empty classes. Later derive it from a passive-material
-      budget.
+- [x] Passive material explicit (`passiveRadiationLengthsPerLayer = 0.014` X0, LAT): it absorbs, converts and scatters like
+      the foil, and the foil lower bound is exactly 0 (replaces the 1e-3 cm floor).
+- [ ] Radiative energy loss of the pair in the foils: the scattering uses a constant E/2, but a 0.57 X0 foil takes about
+      40% of the energy on average.
+- [ ] PSF tails from conversions in the passive material (LAT reports tails from support material).
 - [x] Charged-particle background: nothing rejects it after the ACD (decided), split evenly over the classes,
       independent of the design. Earlier choices (all in layer 0, or spread like the photons) gave the tracker a
       free perfect veto or made the charged particles behave like gammas.

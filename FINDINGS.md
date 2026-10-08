@@ -29,8 +29,9 @@ Foil thickness per layer, layer 0 at the top. Only the layers that can be a conv
 | 6 | New scattering model (3 hits, own silicon, log term, expected conversion depth), even split of the charged background | labelled spatial TS | 1999 µm in layer 0 (the upper bound), then bare layers | **super front-loaded** (one slab), partly a loophole (see 2.3) |
 | 7 | As 6 with the charged background following the material of each layer | labelled spatial TS | best basin: 1449, 10, 11, 1260, 11, 10, 881, 235 µm | **one thick foil in every third layer** (comb) |
 | 8 | As 7 with the power-law source (index 2, 100 MeV to 10 GeV, 8 energy bins, no energy migration) | TS summed over energy bins and layers | best of 10 restarts: 1992, 10, 10, 1998, 10, 10, 1995, 677 µm (TS 9770). The single notebook run: 1515, 1029, 10, 10, 1999, 10, 10, 1999 µm (TS 9616) | **comb again, with several foils at the 0.2 cm upper bound** |
+| 9 | As 8 with explicit passive material (0.014 X0 per layer, absorbs, converts and scatters like the foil) and the foil lower bound exactly 0 | summed TS | best of 10 restarts: 1938, 0, 1, 1992, 1, 1, 1936, 656 µm (TS 9787). The single notebook run: 1992, 0, 0, 1559, 985, 0, 0, 1996 µm (TS 9699) | **a clean comb: thick foils at or near the 0.2 cm upper bound in layers 0, 3 and 6 (and 7), bare layers between** |
 
-So we have seen back-loaded, front-loaded, super front-loaded and one-in-three comb optima. Row 8 shows that adding the energy axis alone did not remove the comb: it moved the thick foils to the placeholder upper bound. Row 4 shows that the
+So we have seen back-loaded, front-loaded, super front-loaded and one-in-three comb optima. Row 8 shows that adding the energy axis alone did not remove the comb: it moved the thick foils to the placeholder upper bound. Row 9 shows that making the passive material explicit did not remove it either: the comb became cleaner, with the thick foils even closer to the upper bound and the bare layers truly bare. Row 4 shows that the
 sign of the slope is controlled by a single toy input, `downstreamScatteringWeight`, which has no source. LAT's
 design is thin in front and thick in the back, which agrees with rows 1 and 4 and disagrees with rows 2, 3, 6, 7.
 It is also an energy trade-off, and v0 is monoenergetic.
@@ -129,6 +130,36 @@ the background-only fit. The monochromatic source is kept and reproduces the ear
   does not fire, because the stack is far thinner than the shower maximum (7.6 radiation lengths). The only warning for
   the real design is that the truncation at 10 GeV discards about 114 to 148 expected signal photons, because the
   source is so bright.
+
+## 4c. Explicit passive material (row 9)
+
+Each layer now carries 0.014 X0 of passive material (the LAT tracker's value per x-y plane) that absorbs, converts and
+scatters like the foil, and the foil lower bound is exactly 0. A tracker with no foil at all stays finite, with finite
+gradients, and about 8% of the photons convert in the passive material alone. The conversion probabilities of all the
+layers add up to `1 - exp(-kappa X)` (0.704395, as expected).
+
+- **Scale:** TS 7272 at the initial design, 9699 in the single run, 9787 at best over 10 restarts.
+- **Consistency:** the labelled, no-label and single-cone TS rise together (9699, 9416 and 8015).
+- **Restarts (10):** seven basins, TS 9279 to 9787 (5% spread). The three best are the same pattern within 0.05%.
+
+| Basin | TS | Found by | Foils [µm], layers 0 to 7 |
+|---|---|---|---|
+| A | 9786.8 | 2 of 10 | 1938, 0, 1, 1992, 1, 1, 1936, 656 |
+| B | 9784.4 | 1 of 10 | 1938, 0, 1, 1999, 0, 0, 1936, 655 |
+| C | 9781.4 | 1 of 10 | 1939, 1, 1, 1988, 1, 0, 1939, 657 |
+| D | 9699.4 | 2 of 10 | 1992, 0, 0, 1556, 986, 0, 1, 1999 |
+| E | 9661.6 | 1 of 10 | 1445, 896, 0, 2, 1997, 0, 0, 1998 |
+| F | 9660.3 | 2 of 10 | 1442, 900, 0, 0, 1999, 1, 0, 1999 |
+| G | 9279.3 | 1 of 10 | 1451, 929, 484, 0, 0, 1996, 1081, 351 |
+
+- **The best designs are pinned at the foil upper bound.** The thick foils sit at or very near the 0.2 cm placeholder, so
+  the pattern is bound-limited. Raising the bound would show whether the optimum keeps asking for more tungsten.
+- **Bare layers now convert about 0.4 to 0.7% of the photons each** (passive material), against about 0.1% when the floor was
+  10 µm of tungsten.
+- **Other settings at the optimum:** layer spacing at the height budget (30.0 cm), ACD 2.95 cm, strip pitch 183 µm with
+  43,827 of the 50,000 channels (below the budget), total conversion 0.785, PSF68 9.7 degrees.
+- **Still missing:** the pair's radiative energy loss in the foils (a 0.57 X0 foil takes about 40% of the energy on average,
+  and the scattering uses a constant E/2), and PSF tails from conversions in the passive material.
 
 ## 5. What has been stable
 
