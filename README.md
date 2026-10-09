@@ -1,13 +1,106 @@
 # AutoDetOpt
 
+<p align="center">
+  <img src="docs/figures/designViews.png" alt="The initial and the optimised tracker: side views labelled with the tungsten thickness of each layer, and 3D drawings" width="900">
+</p>
+
 > **Status: work in progress.** This project uses automatic differentiation (JAX) to optimise the parameters of a
 > gamma-ray pair-conversion tracker, in particular the distribution and amount of tungsten foil. It is at an early
-> stage: the inputs are placeholders and the shape of the optimum has changed with each model improvement, so no
-> design conclusion should be drawn yet. See [FINDINGS.md](FINDINGS.md) for what has been learnt so far and
-> [ROADMAP.md](ROADMAP.md) for what is planned.
+> stage: the inputs are placeholders and the two thickest foils sit at a placeholder bound, so no design conclusion
+> should be drawn yet. See [FINDINGS.md](FINDINGS.md) for what has been learnt so far and [ROADMAP.md](ROADMAP.md) for
+> what is planned.
 
-Differentiable (autodiff) design optimisation of a pair-conversion tracker with an anticoincidence
-detector (ACD), in the spirit of the MODE collaboration's work on end-to-end optimisation of detectors.
+**How much tungsten, and where?** A pair-conversion tracker needs material to convert the photons, but the same material
+scatters the electron and positron and blurs the direction. Fermi-LAT balances this with 16 tungsten layers, thin in front and
+thick at the back. HERD's fibre tracker has none ([Fariña et al. 2021](https://doi.org/10.22323/1.395.0651)). Here the
+whole detector response is a smooth, differentiable [JAX](https://github.com/jax-ml/jax) function of the design, so the
+gradient of the Fermi-style test statistic with respect to every parameter comes for free and Adam climbs it, in the spirit of
+the end-to-end optimisation programme of the MODE collaboration ([white paper](https://arxiv.org/abs/2203.13818)).
+
+## At a glance
+
+| | |
+|---|---|
+| **Figure of merit** | The expected test statistic `TS = 2 ln(L(s+b) / L(b))` of a point source, as in Fermi-LAT (`TS = 25` is 5 sigma), integrated over the sky around the source |
+| **Source** | Power law, index 2, 100 MeV to 10 GeV, 8 energy bins (4 per decade), over a diffuse photon and a charged-particle background |
+| **Free parameters** | Tungsten thickness of each layer, layer spacing, strip pitch, ACD thickness and threshold |
+| **Reconstruction** | A Kalman filter over the hits below the conversion vertex, with scattering, energy loss and the energy sharing of the pair, so the PSF has tails |
+| **Optimiser** | Adam on the gradient from `jax.grad`, in an unbounded space mapped to the allowed ranges by a sigmoid |
+| **Result so far** | Ten random restarts end in one design: foil thickness rising smoothly from 0.38 mm in the top layer to 2 mm in the last conversion layer. TS 14,011, PSF68 6.3 degrees, PSF95 18.6 degrees |
+| **Honest caveats** | The two thickest foils are at the 0.2 cm placeholder bound. Hit inefficiency and pattern recognition are not modelled, so the PSF is optimistic. Fluxes, size and exposure are placeholders |
+
+## Ten random restarts, one design
+
+Each row is a random starting design that the optimiser improved. The columns are the tungsten thickness of the layers from the
+top (0) to the bottom (9). All ten rows reach the same profile. Layers 8 and 9 cannot be a conversion layer, because a track needs
+three hits, so they end bare.
+
+<p align="center">
+  <img src="docs/figures/restartOverview.png" alt="Tungsten thickness per layer for ten random restarts: all rows end at the same profile" width="700">
+</p>
+
+<p align="center">
+  <img src="docs/figures/restartSummary.png" alt="Test statistic during the optimisation, final test statistic per restart, and the scalar parameters each restart chose" width="900">
+</p>
+
+This was not always so. With an earlier heuristic for the PSF the optimum changed shape with every model improvement (back-loaded,
+front-loaded, one foil in every third layer) and random restarts ended in seven different designs. Replacing it with the Kalman
+filter removed all of that, so the heuristic was the root cause. The whole story, including the artifacts found on the way, is in
+[FINDINGS.md](FINDINGS.md).
+
+<details>
+<summary>Optimisation diagnostics (click to open)</summary>
+
+<p align="center">
+  <img src="docs/figures/performanceEvolution.png" alt="Six diagnostic panels during the optimisation: test statistic, counts, conversion probability, angular resolution, ACD inefficiency, channels against the budget" width="900">
+</p>
+
+</details>
+
+## How it works
+
+1. **Layers.** A stack of 10 layers, each a tungsten foil plus 0.014 radiation lengths of passive material (the LAT tracker value),
+   with x and y silicon strip planes, inside a plastic scintillator ACD. Photons are absorbed and converted as they go down.
+2. **Pseudo-detectors.** Each conversion layer in each energy bin is its own class with its own PSF and background, as the event
+   types of Fermi-LAT are. The test statistics add up over layers and energy bins.
+3. **PSF.** A backward Kalman filter over the hits gives the direction error of each track. The track scatters (Highland), loses energy
+   by radiation, and the pair shares the photon energy as in the Bethe-Heitler distribution. The photon direction is the average of
+   the two tracks, as in the HERD reconstruction.
+4. **ACD.** A smooth veto efficiency, a self-veto cost for a thick ACD, and a dead-time cost for a low threshold. Charged particles
+   that pass it are not rejected again.
+5. **Likelihood.** The expected (Asimov) likelihood ratio is integrated over the sky with the exact solid angle of the field of view.
+6. **Checks.** The Kalman covariance is checked against an independent least-squares calculation, the spatial integral against
+   its analytic limit, and the autodiff gradient against finite differences.
+7. **Every number has a source:** a physical constant, a link (see `v0/trackerUtils.py`), or the word "Placeholder".
+
+## Quick start
+
+```bash
+git clone https://github.com/lfarinaa/AutoDetOpt.git
+cd AutoDetOpt
+pip install -r requirements.txt
+nbstripout --install            # once: keeps the notebook outputs out of the commits
+jupyter lab v0/trackerOptimisation.ipynb
+```
+
+The whole notebook, with its ten random restarts, takes about 25 minutes on a laptop-class CPU (the machine it was developed
+on). The optimisation of a single design takes about 2 minutes.
+
+## What is where
+
+| | |
+|---|---|
+| [`v0/trackerOptimisation.ipynb`](v0/trackerOptimisation.ipynb) | The notebook: optimisation, checks, plots, design views, restarts |
+| [`v0/trackerUtils.py`](v0/trackerUtils.py) | All formulas and the fixed inputs, each with its source |
+| [`v0/designReport.txt`](v0/designReport.txt) | A text report of the initial and the optimised design |
+| [`FINDINGS.md`](FINDINGS.md) | A running log of what the optimisation has told us, artifacts included |
+| [`PARAMETERS.md`](PARAMETERS.md) | What every input stands for, its reference value and the open decisions |
+| [`ROADMAP.md`](ROADMAP.md) | What is planned |
+| [`references/`](references) | The bibliography (BibTeX). The papers themselves are not versioned |
+| [`tools/exportFigures.py`](tools/exportFigures.py) | Exports the figures above from an executed notebook |
+| [`v1/`](v1) | Placeholder for the stochastic, event-level version |
+
+## Projects
 
 The repository holds two separate projects that share a goal but not code:
 
@@ -27,26 +120,10 @@ All formulas and the fixed inputs are in [`v0/trackerUtils.py`](v0/trackerUtils.
 The notebook keeps the optimisation loop, the checks, the plots, the design views and the text report
 (`v0/designReport.txt`).
 
-A monoenergetic photon beam at normal incidence hits a stack of tungsten converter layers, each followed by
-two silicon strip planes (x and y), wrapped in a plastic scintillator ACD. The whole response is a smooth
-closed-form function of the design, so `jax.grad` gives the gradient of the significance with respect to
-every parameter and Adam climbs it.
-
 **Free parameters:** converter thickness per layer, layer spacing, strip pitch, ACD thickness, ACD threshold.
-**Fixed:** layer count (scanned by hand), photon energy, detector size, fluxes, exposure.
-**Objective:** Asimov significance of a point source over diffuse photon and charged-particle backgrounds,
-with smooth penalties for channel budget and height.
-
-How it works:
-
-1. Pair conversion probability per layer is `exp(-7/9 x_above) * (1 - exp(-7/9 x_layer))`.
-2. The angular variance of the reconstructed direction is multiple scattering (Highland, no log term) plus
-   pair opening angle plus strip resolution over the lever arm. It is averaged over conversion layers.
-3. A single Gaussian cone of 2 sigma sets the signal containment and the background fraction inside it.
-4. The ACD gives a veto efficiency (smooth sigmoid turn-on), a self-veto photon survival factor and a
-   livetime loss from noise.
-5. Parameters are optimised in an unbounded space and mapped to their ranges by a sigmoid, so there is no
-   clipping and no zero-gradient region at the bounds.
+**Fixed:** layer count (scanned by hand), the source spectrum, detector size, fluxes, exposure.
+**Objective:** the expected test statistic of a point source over diffuse photon and charged-particle backgrounds, with smooth
+penalties for the channel budget and the height. See "How it works" above, and the decisions below.
 
 All numbers are placeholders. Do not trust an optimum until they are set to realistic values.
 
@@ -189,16 +266,18 @@ every recorded step and for the final design:
 
 ### Known limitations of v0
 
-- **No events.** Averaging the variance over conversion layers replaces a mixture of PSFs with one Gaussian.
-- **One interaction, one species.** Only pair conversion in tungsten. Charged particles are a flat flux times
-  `1 - vetoEfficiency`, and the tracker plays no part in rejecting them.
-- **No direction or energy dependence.** Area, acceptance and PSF are constants, and the energy is fixed.
-- **Reconstruction is a formula.** Pattern recognition is a hard mask on the number of downstream layers.
-- **Parameters run to bounds.** The optimum has `acdThickness` at its upper bound (about 3 cm). This means
-  a trade-off is missing (backsplash self-veto, mass, cost), not that 3 cm is right.
+- **Pair conversion only.** No Compton or photoelectric interactions, so the energy range starts at 100 MeV. No bremsstrahlung
+  photons or showers: the pair loses energy on average, and nothing more.
+- **Normal incidence.** No directions, so no side entry, no acceptance, no ACD hermeticity or gaps. That is also why the tracker
+  gives the charged background no further rejection.
+- **The reconstruction is ideal.** The Kalman filter is a Cramér-Rao-type bound: ideal hit efficiency, no pattern recognition, Gaussian
+  scattering, no vertex constraint. The PSF is optimistic.
+- **The energy is known perfectly.** There is no calorimeter and no energy migration.
+- **Expectations, not events.** The response is an analytic expectation. Event-level effects are for v1.
+- **Placeholders at their bounds.** The two thickest foils (0.2 cm), the layer spacing (the 30 cm height) and the ACD (3 cm) are at
+  placeholder bounds, so the optimum is partly bound-limited. The fluxes, the exposure and the instrument size are placeholders.
 
-v0 will be refined as an analytic model (see [ROADMAP.md](ROADMAP.md)), for example adding angle and energy as
-quadrature axes. It stays deterministic.
+v0 is refined step by step (see [ROADMAP.md](ROADMAP.md)). It stays deterministic.
 
 ---
 
@@ -261,11 +340,10 @@ needs smooth boundaries or an SDF-style approach, as in differentiable rendering
 Gradients can be correct for a wrong model. At each stage, validate the optimum against Geant4 (or a similar
 full simulation), at the optimised design and at a few perturbed points.
 
-### References (from memory, verify before citing)
+### References (the first was checked, the others are from memory: verify before citing)
 
-- MODE collaboration, white paper on machine-learning optimised design of experiments (arXiv:2203.13818).
-- MODE, "Toward the end-to-end optimization of particle physics instruments with differentiable programming"
-  (arXiv:2310.05673).
+- T. Dorigo, A. Giammanco, P. Vischia et al., "Toward the End-to-End Optimization of Particle Physics Instruments with
+  Differentiable Programming: a White Paper", [arXiv:2203.13818](https://arxiv.org/abs/2203.13818).
 - TomOpt, differentiable muon tomography optimisation.
 - Shirobokov et al., "Black-box optimization with local generative surrogates" (2020).
 - Aehle et al., pathwise derivatives of electromagnetic shower simulations (2024).
