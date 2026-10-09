@@ -16,7 +16,10 @@ foils increase smoothly with depth, thin in front and thick at the back. So the 
 multimodality, as suspected. The result is more credible, but not yet a design: the two thickest foils are still pinned at
 the 0.2 cm placeholder bound, the reconstruction is idealised (ideal hit efficiency, no pattern recognition), and the
 inputs are placeholders. Section 4f replaces the placeholder fluxes by LAT numbers (TS 268 instead of 14,000): the profile keeps its shape and is about
-20% thinner in front. Sections 1 to 4d describe the window-heuristic model.
+20% thinner in front. **The optimum still leans toward heavy tungsten.** Its eight conversion-layer foils add up to 2.12 radiation lengths (7.43 mm), about twice
+the LAT's 1.1 (12 × 0.03 + 4 × 0.18 X₀), and its PSF is 1.6 to 2.5 times wider than the LAT requirement (section 4f). The objective at
+TS ten times the detection threshold still rewards photons over sharpness. Whether that survives a fainter source, a larger detector or a
+realistic reconstruction is open. Sections 1 to 4d describe the window-heuristic model.
 
 ## 1. How the converter profile changed with the model
 
@@ -275,6 +278,10 @@ pitch (160 to 180 µm, set by the channel budget). The total conversion probabil
 and PSF68 near 9 to 14 degrees, but these also moved with every model change. With the power-law source the layer spacing
 is also pinned (the 30 cm height budget) and several foils sit at the 0.2 cm placeholder upper bound. The strip pitch is
 the exception: it is no longer set by the channel budget.
+
+The leaning toward heavy tungsten is also stable across the changes so far: every Kalman run, with the old and the new inputs, puts the thick
+end of the profile (0.57 X₀ per foil) at the bottom and keeps the total conversion above 0.8. It is a property of the objective at these
+inputs, not a numerical artifact, and it is not yet a design result.
 
 ## 6. What would make the foil placement trustworthy
 
