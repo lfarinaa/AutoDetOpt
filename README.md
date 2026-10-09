@@ -274,8 +274,9 @@ every recorded step and for the final design:
   scattering, no vertex constraint. The PSF is optimistic.
 - **The energy is known perfectly.** There is no calorimeter and no energy migration.
 - **Expectations, not events.** The response is an analytic expectation. Event-level effects are for v1.
-- **Placeholders at their bounds.** The two thickest foils (0.2 cm), the layer spacing (the 30 cm height) and the ACD (3 cm) are at
-  placeholder bounds, so the optimum is partly bound-limited. The fluxes, the exposure and the instrument size are placeholders.
+- **Placeholders at their bounds.** The thickest foil (0.2 cm) and the layer spacing (the 30 cm height) are at placeholder bounds, and
+  the channel budget binds, so the optimum is partly bound-limited. The instrument size (40 cm) is a placeholder, the charged flux is
+  inferred, and the fluxes and the exposure come from LAT numbers.
 
 v0 is refined step by step (see [ROADMAP.md](ROADMAP.md)). It stays deterministic.
 
