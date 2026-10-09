@@ -118,7 +118,7 @@ constraintPenaltyWeight = 20.0         # Weight of the constraint penalty agains
 # Plastic scintillator ACD.
 minimumIonisingEnergyLossPerLength = 2.019   # MeV/cm, energy deposited by a minimum ionising particle. Physical constant: polyvinyltoluene, 1.956 MeV cm^2/g at 1.032 g/cm^3 [pdg2024pvt] https://pdg.lbl.gov/2024/AtomicNuclearProperties/HTML/polyvinyltoluene.html
 maximumVetoEfficiency = 0.9995         # Approximation, chosen between the previous placeholder 0.999 and the LAT tile efficiency above 0.9997 averaged over the ACD area [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.3 and Table 4.
-vetoTurnOnWidthFraction = 0.25         # Width of the efficiency turn-on, as a fraction of the deposit. Toy value, no source.
+vetoTurnOnWidthFraction = 0.08         # Width of the efficiency turn-on, as a fraction of the deposit. Calibrated to LAT: a 1 cm tile (2.0 MeV for a MIP) at the ground-analysis threshold of about 0.3 MIP then has an inefficiency of 6.6e-4, within a factor 2 of the LAT tile requirement of 3e-4 (efficiency above 0.9997) [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.3 and Table 4. It was a toy 0.25, which capped the ACD efficiency near 98% whatever the thickness and threshold.
 accidentalVetoScale = 0.1              # MeV. Sets how fast noise-induced dead time falls with threshold. Toy value, no source.
 
 # Allowed range of each free parameter. Optimisation runs in an unbounded space (see below).
