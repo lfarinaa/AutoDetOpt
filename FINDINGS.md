@@ -15,7 +15,8 @@ model removed that instability** (row 10, section 4e): the comb is gone, the res
 foils increase smoothly with depth, thin in front and thick at the back. So the heuristic PSF was the root cause of the
 multimodality, as suspected. The result is more credible, but not yet a design: the two thickest foils are still pinned at
 the 0.2 cm placeholder bound, the reconstruction is idealised (ideal hit efficiency, no pattern recognition), and the
-inputs are placeholders. Sections 1 to 4d describe the window-heuristic model.
+inputs are placeholders. Section 4f replaces the placeholder fluxes by LAT numbers (TS 268 instead of 14,000): the profile keeps its shape and is about
+20% thinner in front. Sections 1 to 4d describe the window-heuristic model.
 
 ## 1. How the converter profile changed with the model
 
@@ -33,6 +34,7 @@ Foil thickness per layer, layer 0 at the top. Only the layers that can be a conv
 | 8 | As 7 with the power-law source (index 2, 100 MeV to 10 GeV, 8 energy bins, no energy migration) | TS summed over energy bins and layers | best of 10 restarts: 1992, 10, 10, 1998, 10, 10, 1995, 677 µm (TS 9770). The single notebook run: 1515, 1029, 10, 10, 1999, 10, 10, 1999 µm (TS 9616) | **comb again, with several foils at the 0.2 cm upper bound** |
 | 9 | As 8 with explicit passive material (0.014 X0 per layer, absorbs, converts and scatters like the foil) and the foil lower bound exactly 0 | summed TS | best of 10 restarts: 1938, 0, 1, 1992, 1, 1, 1936, 656 µm (TS 9787). The single notebook run: 1992, 0, 0, 1559, 985, 0, 0, 1996 µm (TS 9699) | **a clean comb: thick foils at or near the 0.2 cm upper bound in layers 0, 3 and 6 (and 7), bare layers between** |
 | 10 | As 9 with the Kalman-filter PSF model (energy loss of the pair, energy sharing integrated, mixture PSF with tails) | summed TS | best of 10 restarts: 376, 445, 550, 714, 1004, 1634, 2000, 2000 µm (TS 14011) | **back-loaded and smooth: foils increase with depth, no comb, one basin** |
+| 11 | As 10 with the LAT-referenced source and background, the ACD turn-on calibrated to the LAT tile, and half the optimiser steps | summed TS | all 10 restarts: 303, 351, 429, 545, 736, 1100, 1993, 1999 µm (TS 268) | **same smooth back-loaded profile, about 20% thinner in front** |
 
 So we have seen back-loaded, front-loaded, super front-loaded and one-in-three comb optima. Row 8 shows that adding the energy axis alone did not remove the comb: it moved the thick foils to the placeholder upper bound. Row 9 shows that making the passive material explicit did not remove it either: the comb became cleaner, with the thick foils even closer to the upper bound and the bare layers truly bare. Row 4 shows that the
 sign of the slope is controlled by a single toy input, `downstreamScatteringWeight`, which has no source. LAT's
@@ -221,6 +223,51 @@ and reproduces its old numbers exactly.
   scattering are not in the model, so the PSF is optimistic. The shape of the optimum is more credible than its numbers.
 - **Run time:** the 8-bin Kalman model takes about 49 ms per gradient step, and the full notebook about 24 minutes.
 
+## 4f. LAT-referenced inputs, a calibrated ACD, and half the steps (row 11)
+
+Three changes were made together after noticing that TS 14,000 (Z = 118) is absurd, that the ACD inefficiency was high, and that the
+notebook was slow.
+
+- **The ACD turn-on was a toy that capped the efficiency near 98%.** The veto efficiency is
+  `0.9995 × sigmoid((deposit − threshold) / (width × deposit))` with the width a fixed fraction of the deposit, so a thicker ACD never
+  sharpens it. With the old width of 0.25 the inefficiency could never be below 1.9% (it was 2.4% at the optimum), against the LAT tile
+  requirement of 3e-4. The width is now 0.08, calibrated so that a 1 cm tile at the LAT threshold of about 0.3 MIP gives 6.6e-4. A
+  thicker ACD now only adds self-veto and dead time, so the optimiser stopped thickening: ACD 1.39 cm (was 2.87), at the efficiency
+  ceiling (5e-4).
+- **The inputs now come from LAT numbers.**
+
+| Input | Before | Now | Source |
+|---|---|---|---|
+| Signal flux | 1e-3 /cm² s | 1e-7 | LAT Table 1 note d (faint high-latitude source) |
+| Diffuse photons | 1e-2 over 1 sr | 1.5e-5 /cm² s sr × the field of view | LAT Table 1 note e |
+| Charged flux | 1.0 /cm² s | 0.1 | inferred from the LAT trigger rate (2-4 kHz over 3.2e4 cm²) |
+| Field of view | 1 sr | 2.4 sr | LAT |
+| Exposure | 1e4 s | 6.0e6 s | one year × the sky fraction in view, 2.4 sr / 4π |
+
+  The detector is still 40 cm wide, about 20 times less area than the LAT.
+- **Half the optimiser steps** (1000 for the main run, 750 per restart). The test statistic is flat after about 300 steps. The notebook
+  takes 11.5 minutes instead of 24.
+
+**Result.** TS 198 at the initial design and 268 (Z = 16.4) at the optimum, from 663 signal photons. That is ten times the detection
+threshold of 25, a plausible value for a 40 cm detector watching a 1e-7 source for a year. All ten restarts reach one basin:
+303, 351, 429, 545, 736, 1100, 1993 and 1999 µm (the earlier optimum was 376 to 2000 µm), so the back-loaded profile is robust to the
+change of regime and only a little thinner in front. The no-label TS is 238. The last foil is at the 0.2 cm bound, the layer spacing at
+the height budget (3.34 cm), and the channels at the budget (50,055 of 50,000). PSF68 5.9 degrees and PSF95 17.9 degrees on average.
+
+**The PSF against the LAT.** In our model a LAT-like design (105 µm of tungsten, 0.03 X₀, in every layer, spacing 3.2 cm, pitch 228 µm)
+gives PSF68 of 2.96 degrees at 126 MeV, about 0.55 at 1 GeV and 0.11 at 7 GeV, against the LAT requirement of 3.5, 0.6 and at most 0.15
+(Table 1). So the model is calibrated against the LAT and is not too good. The optimum is clearly worse than that design: 8.8, 1.2 and
+0.24 degrees at 126 MeV, 1.3 GeV and 7 GeV, which is 1.6 to 2.5 times the requirement. The reason is the optimiser's choice, not the
+model: its foils are 3 to 19 times thicker than the LAT's, because at TS ten times the threshold the signal is still not background
+limited, and more photons beat sharper photons. A fainter source or a larger detector should show the effect of the regime on the profile.
+
+**Background composition.** At the optimum the field of view holds 663 signal photons, 2.4e5 diffuse photons and 5.1e5 charged-leak events
+(veto inefficiency 5.4e-4). So the residual charged background is the same order as the diffuse one, as in the LAT.
+
+**The leftover foils of layers 8 and 9.** These layers cannot be conversion layers, so any foil there is pure cost. They keep 1.7 µm
+after 1000 steps (0.5 µm after 2000, 62 µm after 100), because the sigmoid never reaches 0 and the gradient on them is tiny. At 0.5 µm
+they cost 0.001% of the TS. It is a numerical leftover, and setting them to exactly 0 by construction is a possible clean-up.
+
 ## 5. What has been stable
 
 Only the quantities that are pinned by a bound or budget: the ACD thickness (at its 3 cm upper bound) and the strip
@@ -234,7 +281,8 @@ the exception: it is no longer set by the channel budget.
 1. ~~The fit-covariance PSF model~~ (done, section 4e). It removed the comb and the multimodality.
 2. Hit inefficiency as a mixture over missed-hit patterns (more PSF tails, and the confusion matrix), and pattern recognition.
 3. Raise or source the 0.2 cm foil bound and see whether the optimum keeps asking for more tungsten at the back.
-4. A realistic regime: the source flux, the background, the exposure and the instrument size.
+4. A realistic instrument size (the fluxes and the exposure now come from LAT numbers; the detector is still 40 cm), and a
+   check of how the profile changes for a fainter source.
 5. Directions, which give the tracker's charged rejection a physical basis.
 6. A restart protocol: always report the spread over restarts and the basins, never a single run, and test whether the conclusion
    survives each model change.
