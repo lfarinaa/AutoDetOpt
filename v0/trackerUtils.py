@@ -41,11 +41,12 @@ detectorSideLength = 40.0              # cm. Placeholder. Reference: LAT is 1.8 
 passiveRadiationLengthsPerLayer = 0.014   # X0 per x-y layer. The material of a layer that is not the foil (silicon detectors, supports, electronics). It absorbs, converts and scatters like the foil. Value of the LAT tracker, 0.014 X0 per x-y plane [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 2. A different technology would differ, decision pending.
 
 # Fluxes and observation conditions.
-signalPhotonFlux = 1e-3                # 1/(cm^2 s), integral flux above energyMinimum for the power law. Placeholder, very bright. Reference: 1e-7 above 100 MeV for a faint high-latitude source [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d.
-diffusePhotonFlux = 1e-2               # 1/(cm^2 s) over the field of view. Placeholder. Reference: 1.5e-5 per cm^2 s sr above 100 MeV at high latitude, index 2.1 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note e.
-chargedParticleFlux = 1.0              # 1/(cm^2 s). Placeholder. Reference: about 0.1 inferred from the LAT raw trigger rate of 2-4 kHz over about 3.2e4 cm^2 [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.3.
-exposureDuration = 1e4                 # s. Placeholder. Reference: LAT 1-year survey [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d; HERD 1, 5 and 10 years [farina2021herd] https://doi.org/10.22323/1.395.0651 Fig. 3.
-fieldOfViewSolidAngle = 1.0            # sr. Placeholder. Reference: LAT 2.4 sr at 1 GeV [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.1.
+signalPhotonFlux = 1e-7                # 1/(cm^2 s), integral flux above energyMinimum for the power law. The faint high-latitude source of the LAT localisation requirement, above 100 MeV with index 2 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d.
+fieldOfViewSolidAngle = 2.4            # sr. LAT field of view at 1 GeV [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.1.
+diffusePhotonFluxPerSolidAngle = 1.5e-5   # 1/(cm^2 s sr), integral flux above energyMinimum. LAT high-latitude diffuse flux above 100 MeV, index 2.1 [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note e.
+diffusePhotonFlux = diffusePhotonFluxPerSolidAngle * fieldOfViewSolidAngle   # 1/(cm^2 s) over the field of view. Derived.
+chargedParticleFlux = 0.1              # 1/(cm^2 s) over the field of view, before the ACD. Inferred, not quoted: the LAT raw trigger rate of 2-4 kHz over its area of about 3.2e4 cm^2 gives 0.06 to 0.12, this takes the upper end [atwood2009lat] https://arxiv.org/abs/0902.1089 section 2.2.3.
+exposureDuration = 6.0e6               # s. One year of survey, 3.156e7 s [atwood2009lat] https://arxiv.org/abs/0902.1089 Table 1 note d, times the fraction of the sky in view of the LAT, 2.4 sr / 4 pi = 0.19 (section 2.1): 6.0e6 s. HERD quotes 1, 5 and 10 years [farina2021herd] https://doi.org/10.22323/1.395.0651 Fig. 3.
 
 # Source spectrum, as in the Fermi-LAT and HERD sensitivity calculations: a power law dN/dE ~ E^-index truncated to [energyMinimum, energyMaximum]
 # and binned in energy. The energy is assumed known perfectly (no energy migration), so every energy bin is its own set of classes and the test
