@@ -3,14 +3,14 @@ Design: initial
 PSF model: kalman
 Source: power law, index 2.0, 100 to 10000 MeV, 8 bins, energy known perfectly
 Figures of merit
-  TS, per-layer classes (objective):            10936.7   (Z = 104.58)
-  TS, no layer labels (lower bound):            10514.0   (Z = 102.54)
-  TS, single cone (check):                       5448.3   (Z = 73.81)
+  TS, per-layer classes (objective):              197.8   (Z = 14.07)
+  TS, no layer labels (lower bound):              193.6   (Z = 13.91)
+  TS, single cone (check):                         78.4   (Z = 8.85)
   (a 5 sigma detection is TS = 25)
-  signal photons:                               11190.3
+  signal photons:                                 671.4
   total conversion probability:                   0.845
   PSF68 / PSF95 [deg]:                             6.37 / 17.34
-  ACD veto efficiency:                           0.9661
+  ACD veto efficiency:                           0.9995
   channels / budget:                              10488 / 50000
   constraint penalty:                            0.0265
 Scalar parameters
@@ -32,42 +32,40 @@ Tungsten converter per layer (layer 0 is at the top)
       7           1000.0   0.2854             0.0407        7.10 / 0.38
       8           1000.0   0.2854             0.0000        6.96 / 0.45  (cannot be a conversion layer)
       9           1000.0   0.2854             0.0000      128.29 / 128.12  (cannot be a conversion layer)
-Energy-bound warnings
-  WARNING: the truncation at energyMaximum discards about 113 expected signal photons (more than 10).
+Energy-bound warnings: none
 
 Design: optimised
 ============================================================
 PSF model: kalman
 Source: power law, index 2.0, 100 to 10000 MeV, 8 bins, energy known perfectly
 Figures of merit
-  TS, per-layer classes (objective):            14005.4   (Z = 118.34)
-  TS, no layer labels (lower bound):            12518.0   (Z = 111.88)
-  TS, single cone (check):                       5713.6   (Z = 75.59)
+  TS, per-layer classes (objective):              267.9   (Z = 16.37)
+  TS, no layer labels (lower bound):              238.5   (Z = 15.44)
+  TS, single cone (check):                         76.1   (Z = 8.72)
   (a 5 sigma detection is TS = 25)
-  signal photons:                               11219.3
-  total conversion probability:                   0.868
-  PSF68 / PSF95 [deg]:                             6.31 / 18.63
-  ACD veto efficiency:                           0.9757
-  channels / budget:                              48901 / 50000
+  signal photons:                                 663.1
+  total conversion probability:                   0.824
+  PSF68 / PSF95 [deg]:                             5.92 / 17.88
+  ACD veto efficiency:                           0.9995
+  channels / budget:                              50055 / 50000
   constraint penalty:                            0.0000
 Scalar parameters
-  layerSpacing       3.3347 cm  
-  stripPitch       163.5966 µm  
-  acdThickness       2.8697 cm  
-  acdThreshold       0.4155 MeV 
+  layerSpacing       3.3370 cm  
+  stripPitch       159.8245 µm  
+  acdThickness       1.3881 cm  
+  acdThreshold       0.5127 MeV 
   passive material per layer (fixed input): 0.014 X0
-  detector height (layer stack): 30.01 cm of 30 cm
+  detector height (layer stack): 30.03 cm of 30 cm
 Tungsten converter per layer (layer 0 is at the top)
   layer   thickness [µm]   [X0]     conversion prob.   rms sigma [deg] at 126 MeV / 7106 MeV
-      0            376.1   0.1073             0.0900        4.46 / 0.21
-      1            445.5   0.1271             0.0946        4.83 / 0.22
-      2            550.2   0.1570             0.1015        5.35 / 0.25
-      3            713.1   0.2035             0.1111        6.11 / 0.28
-      4           1005.0   0.2868             0.1257        7.36 / 0.34
-      5           1634.4   0.4664             0.1487        9.82 / 0.45
-      6           1998.5   0.5704             0.1199       11.07 / 0.50  <- at upper bound
-      7           1999.0   0.5705             0.0761       10.65 / 0.48  <- at upper bound
-      8              0.6   0.0002             0.0000        1.24 / 0.10  <- at lower bound  (cannot be a conversion layer)
-      9              0.5   0.0002             0.0000      128.12 / 128.12  <- at lower bound  (cannot be a conversion layer)
-Energy-bound warnings
-  WARNING: the truncation at energyMaximum discards about 113 expected signal photons (more than 10).
+      0            303.2   0.0865             0.0752        4.01 / 0.19
+      1            351.0   0.1002             0.0786        4.28 / 0.20
+      2            428.8   0.1224             0.0852        4.70 / 0.22
+      3            545.3   0.1556             0.0941        5.29 / 0.24
+      4            736.1   0.2101             0.1067        6.16 / 0.28
+      5           1099.5   0.3138             0.1261        7.67 / 0.35
+      6           1969.3   0.5620             0.1568       10.95 / 0.50
+      7           1996.5   0.5698             0.1012       10.64 / 0.48  <- at upper bound
+      8              1.7   0.0005             0.0000        1.25 / 0.10  <- at lower bound  (cannot be a conversion layer)
+      9              1.7   0.0005             0.0000      128.12 / 128.12  <- at lower bound  (cannot be a conversion layer)
+Energy-bound warnings: none

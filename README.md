@@ -6,8 +6,8 @@
 
 > **Status: work in progress.** This project uses automatic differentiation (JAX) to optimise the parameters of a
 > gamma-ray pair-conversion tracker, in particular the distribution and amount of tungsten foil. It is at an early
-> stage: the inputs are placeholders and the two thickest foils sit at a placeholder bound, so no design conclusion
-> should be drawn yet. See [FINDINGS.md](FINDINGS.md) for what has been learnt so far and [ROADMAP.md](ROADMAP.md) for
+> stage: the detector size and some other inputs are placeholders and the thickest foil sits at a placeholder bound, so no
+> design conclusion should be drawn yet. See [FINDINGS.md](FINDINGS.md) for what has been learnt so far and [ROADMAP.md](ROADMAP.md) for
 > what is planned.
 
 **How much tungsten, and where?** A pair-conversion tracker needs material to convert the photons, but the same material
@@ -26,8 +26,8 @@ the end-to-end optimisation programme of the MODE collaboration ([white paper](h
 | **Free parameters** | Tungsten thickness of each layer, layer spacing, strip pitch, ACD thickness and threshold |
 | **Reconstruction** | A Kalman filter over the hits below the conversion vertex, with scattering, energy loss and the energy sharing of the pair, so the PSF has tails |
 | **Optimiser** | Adam on the gradient from `jax.grad`, in an unbounded space mapped to the allowed ranges by a sigmoid |
-| **Result so far** | Ten random restarts end in one design: foil thickness rising smoothly from 0.38 mm in the top layer to 2 mm in the last conversion layer. TS 14,011, PSF68 6.3 degrees, PSF95 18.6 degrees |
-| **Honest caveats** | The two thickest foils are at the 0.2 cm placeholder bound. Hit inefficiency and pattern recognition are not modelled, so the PSF is optimistic. Fluxes, size and exposure are placeholders |
+| **Result so far** | Ten random restarts end in one design: foil thickness rising smoothly from 0.30 mm in the top layer to 2 mm in the last conversion layer. TS 268 (Z = 16) for a source of 1e-7 /cm2 s seen for a year, PSF68 5.9 degrees, PSF95 17.9 degrees |
+| **Honest caveats** | The thickest foil is at the 0.2 cm placeholder bound, and the detector size (40 cm) is a placeholder. Fluxes and exposure come from LAT numbers (the charged flux is inferred). The reconstruction is ideal (no hit inefficiency, no pattern recognition). The optimised PSF is 1.6 to 2.5 times wider than the LAT requirement: the optimiser trades sharpness for photons |
 
 ## Ten random restarts, one design
 
