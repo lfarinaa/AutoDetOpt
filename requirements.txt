@@ -1,0 +1,11 @@
+# Versions the project was developed and tested with. The model runs in 64-bit floats on the CPU.
+jax>=0.10
+optax>=0.2.8
+numpy>=2.0
+matplotlib>=3.9
+# Notebook and tooling
+jupyterlab
+ipykernel>=6.29
+nbformat>=5.10
+nbconvert>=7.16
+nbstripout>=0.9
